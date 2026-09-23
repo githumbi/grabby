@@ -9,8 +9,12 @@ interface PersistedShape {
 }
 
 let pendingRaf: number | null = null;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingEntries: HistoryEntry[] | null = null;
 let quotaWarned = false;
+
+/** How long to wait for a frame that may never arrive before writing anyway. */
+const FLUSH_FALLBACK_MS = 100;
 
 export function loadHistory(): HistoryEntry[] {
   try {
@@ -29,14 +33,21 @@ export function loadHistory(): HistoryEntry[] {
 
 export function saveHistory(entries: HistoryEntry[]): void {
   pendingEntries = entries;
-  if (pendingRaf != null) return;
+  if (pendingRaf != null || pendingTimer != null) return;
   pendingRaf = requestAnimationFrame(flushPendingWrite);
+  // A backgrounded or occluded tab gets no frames, and the grab would sit in
+  // memory until the page went away. The timer guarantees the write lands.
+  pendingTimer = setTimeout(flushPendingWrite, FLUSH_FALLBACK_MS);
 }
 
 export function flushPendingWrite(): void {
   if (pendingRaf != null) {
     cancelAnimationFrame(pendingRaf);
     pendingRaf = null;
+  }
+  if (pendingTimer != null) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
   }
   if (pendingEntries == null) return;
   const entries = pendingEntries;

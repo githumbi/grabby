@@ -82,6 +82,13 @@ export interface PluginHooks {
   onElementHover?: (element: Element) => void;
   onElementSelect?: (context: ElementContext) => void;
   onBeforeCopy?: (context: ElementContext) => void;
+  /**
+   * A grab was recorded, with its comment. Fires whether or not the clipboard
+   * write then succeeded, so use this — not `onCopySuccess` — to persist or
+   * forward grabs. The clipboard can reject for reasons that have nothing to
+   * do with the grab, such as the document not being focused.
+   */
+  onGrab?: (text: string, context: ElementContext, comment?: string) => void;
   onCopySuccess?: (text: string, context: ElementContext, prompt?: string) => void;
   onCopyError?: (error: Error) => void;
   transformCopyContent?: (text: string, context: ElementContext) => string;

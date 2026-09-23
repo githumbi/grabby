@@ -203,9 +203,15 @@ registerAngularGrabPlugin({
 | `onElementHover` | Mouse hovers over an element |
 | `onElementSelect` | Element is selected |
 | `onBeforeCopy` | About to copy to clipboard |
+| `onGrab` | Grab recorded, with its comment — fires even if the copy then fails |
 | `onCopySuccess` | Successfully copied |
 | `onCopyError` | Copy failed |
 | `transformCopyContent` | Transform clipboard text before copying |
+
+Use `onGrab` rather than `onCopySuccess` to persist or forward grabs. The
+clipboard write rejects for reasons that have nothing to do with the grab —
+most often because the document isn't focused — and a grab must not be lost
+when it does. `onCopySuccess` means only that the clipboard write worked.
 
 ### Plugin theme overrides
 

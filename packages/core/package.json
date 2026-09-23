@@ -1,6 +1,6 @@
 {
   "name": "@githumbi/angular-grab",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Grab any element in your Angular app and give it to AI coding agents",
   "author": "Githumbi <githumbi74@gmail.com>",
   "license": "MIT",

@@ -12,7 +12,7 @@ import type {
 import { createStore } from './store';
 import { createOverlayRenderer } from './overlay/overlay-renderer';
 import { createCrosshair } from './overlay/crosshair';
-import { showToast, disposeToast } from './overlay/toast';
+import { showToast, disposeToast, type ToastDetail } from './overlay/toast';
 import { createElementPicker } from './picker/element-picker';
 import { createKeyboardHandler, isMac } from './keyboard/keyboard-handler';
 import { buildElementContext } from './clipboard/copy';
@@ -155,19 +155,29 @@ export function createGrabInstance(options?: Partial<AngularGrabOptions>): Angul
 
     const formatted = formatMultiSessionClipboard(grabSessions);
 
+    // Record the grab before going near the clipboard. writeText rejects
+    // whenever the document isn't focused, and the comment is the user's work —
+    // losing it because a clipboard permission lapsed is never right.
+    addHistoryEntry(context, snippet, comment);
+    pluginRegistry.callHook('onGrab', formatted, context, comment);
+
+    const detail: ToastDetail = {
+      componentName: context.componentName,
+      filePath: context.filePath,
+      line: context.line,
+      column: context.column,
+      cssClasses: context.cssClasses,
+    };
+
     try {
       await navigator.clipboard.writeText(formatted);
-      showToast('Copied with comment', {
-        componentName: context.componentName,
-        filePath: context.filePath,
-        line: context.line,
-        column: context.column,
-        cssClasses: context.cssClasses,
-      });
-      addHistoryEntry(context, snippet, comment);
+      showToast('Copied with comment', detail);
       pluginRegistry.callHook('onCopySuccess', formatted, context, comment);
       return true;
-    } catch {
+    } catch (err) {
+      // The grab is already saved, so say that rather than failing silently.
+      showToast('Saved to history — clipboard blocked', detail);
+      pluginRegistry.callHook('onCopyError', err instanceof Error ? err : new Error(String(err)));
       return false;
     }
   }
@@ -381,6 +391,18 @@ export function createGrabInstance(options?: Partial<AngularGrabOptions>): Angul
   }
   document.addEventListener('click', handleDocumentClick);
 
+  // A refresh can land between a grab and its batched write, which would lose
+  // the comment. pagehide covers reload and close; visibilitychange covers the
+  // mobile case where pagehide isn't guaranteed to run.
+  function handlePageHide(): void {
+    flushPendingWrite();
+  }
+  function handleVisibilityChange(): void {
+    if (document.visibilityState === 'hidden') flushPendingWrite();
+  }
+  window.addEventListener('pagehide', handlePageHide);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
   // --- Toast offset helper ---
   function updateToastOffset(): void {
     if (store.state.toolbar.visible) {
@@ -518,6 +540,8 @@ export function createGrabInstance(options?: Partial<AngularGrabOptions>): Angul
       flushPendingWrite();
       doDeactivate();
       document.removeEventListener('click', handleDocumentClick);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', handleFreezeKey, true);
       document.removeEventListener('keydown', handleEscapeKey, true);
       keyboard.dispose();

@@ -142,10 +142,25 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     el.style.top = `${top}px`;
   }
 
+  /** True for fields the user could legitimately be typing into instead. */
+  function isEditable(el: Element | null): boolean {
+    if (!el || el === textarea) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      || (el as HTMLElement).isContentEditable === true;
+  }
+
   function attachKey(): void {
     if (keydownHandler) return;
     keydownHandler = (e: KeyboardEvent) => {
-      if (!textarea || document.activeElement !== textarea) return;
+      if (!textarea || !visible) return;
+      // Normally the textarea has focus. If focus was never granted or was
+      // stolen by something outside a field, the popover still owns the
+      // keyboard — dropping the key here is what silently discarded comments.
+      if (document.activeElement !== textarea) {
+        if (isEditable(document.activeElement)) return;
+        textarea.focus();
+      }
       e.stopImmediatePropagation();
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -188,6 +203,11 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       visible = true;
       position(el, opts.anchor);
       attachKey();
+      // Focus now rather than only on a frame: an occluded or backgrounded tab
+      // gets no frames, and without focus the textarea swallows nothing and
+      // Enter never submits. The frame is kept as a retry for the case where
+      // the click that opened the popover takes focus back afterwards.
+      textarea?.focus();
       requestAnimationFrame(() => textarea?.focus());
     },
     hide(): void {

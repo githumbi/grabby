@@ -6,7 +6,9 @@ export function createMcpWebhookPlugin(url: string = DEFAULT_WEBHOOK_URL): Plugi
   return {
     name: 'mcp-webhook',
     hooks: {
-      onCopySuccess(snippet: string, context: ElementContext, comment?: string) {
+      // onGrab, not onCopySuccess: a grab must reach the server even when the
+      // clipboard write fails, which it does whenever the document isn't focused.
+      onGrab(snippet: string, context: ElementContext, comment?: string) {
         fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
