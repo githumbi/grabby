@@ -49,6 +49,35 @@ export default defineConfig([
     outDir: 'dist',
     external: ['vite'],
   },
+  // 5a. React Vite plugin (JSX source stamping): ESM + types
+  {
+    entry: { 'vite-plugin/react': 'src/vite-plugin/react.ts' },
+    format: ['esm'],
+    dts: true,
+    clean: false,
+    sourcemap: true,
+    outDir: 'dist',
+    external: ['vite', '@babel/core'],
+  },
+  // 5b. React: ESM + types
+  {
+    entry: { 'react/index': 'src/react/index.ts' },
+    format: ['esm'],
+    dts: true,
+    clean: false,
+    sourcemap: true,
+    outDir: 'dist',
+  },
+  // 5c. Babel plugin (React source stamping): ESM + CJS + types
+  {
+    entry: { 'babel-plugin/index': 'src/babel-plugin/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    clean: false,
+    sourcemap: true,
+    outDir: 'dist',
+    external: ['@babel/core'],
+  },
   // 6. Webpack plugin + loader: ESM + CJS + types
   {
     entry: {

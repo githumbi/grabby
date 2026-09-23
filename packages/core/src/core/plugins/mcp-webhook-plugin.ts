@@ -1,13 +1,13 @@
 import type { Plugin, ElementContext } from '../types';
 
-const MCP_WEBHOOK_URL = 'http://localhost:3456/grab';
+export const DEFAULT_WEBHOOK_URL = 'http://localhost:3456/grab';
 
-export function createMcpWebhookPlugin(): Plugin {
+export function createMcpWebhookPlugin(url: string = DEFAULT_WEBHOOK_URL): Plugin {
   return {
     name: 'mcp-webhook',
     hooks: {
-      onCopySuccess(snippet: string, context: ElementContext) {
-        fetch(MCP_WEBHOOK_URL, {
+      onCopySuccess(snippet: string, context: ElementContext, comment?: string) {
+        fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -19,6 +19,8 @@ export function createMcpWebhookPlugin(): Plugin {
             selector: context.selector,
             cssClasses: context.cssClasses,
             snippet,
+            comment: comment ?? null,
+            pageUrl: typeof location !== 'undefined' ? location.href : null,
             componentStack: context.componentStack.map((c) => ({
               name: c.name,
               filePath: c.filePath,

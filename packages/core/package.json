@@ -1,6 +1,6 @@
 {
   "name": "@githumbi/angular-grab",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Grab any element in your Angular app and give it to AI coding agents",
   "author": "Githumbi <githumbi74@gmail.com>",
   "license": "MIT",
@@ -25,6 +25,19 @@
     "./angular": {
       "types": "./dist/angular/index.d.ts",
       "import": "./dist/angular/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./babel": {
+      "types": "./dist/babel-plugin/index.d.ts",
+      "import": "./dist/babel-plugin/index.js",
+      "require": "./dist/babel-plugin/index.cjs"
+    },
+    "./vite-react": {
+      "types": "./dist/vite-plugin/react.d.ts",
+      "import": "./dist/vite-plugin/react.js"
     },
     "./esbuild": {
       "types": "./dist/esbuild-plugin/index.d.ts",
@@ -52,7 +65,11 @@
     "./builders.json": "./builders.json",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "builders.json", "README.md"],
+  "files": [
+    "dist",
+    "builders.json",
+    "README.md"
+  ],
   "scripts": {
     "prebuild": "node -e \"require('fs').copyFileSync('../../README.md','README.md')\"",
     "build": "tsup",
@@ -60,6 +77,9 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "clean": "node -e \"const fs=require('fs');['dist','README.md'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch{}})\""
+  },
+  "dependencies": {
+    "@babel/core": "^7.24.0"
   },
   "peerDependencies": {
     "@angular/core": ">=19.0.0",
@@ -71,17 +91,30 @@
     "webpack": ">=5.0.0"
   },
   "peerDependenciesMeta": {
-    "@angular/core": { "optional": true },
-    "@angular/build": { "optional": true },
-    "@angular-devkit/architect": { "optional": true },
-    "esbuild": { "optional": true },
-    "vite": { "optional": true },
-    "webpack": { "optional": true }
+    "@angular/core": {
+      "optional": true
+    },
+    "@angular/build": {
+      "optional": true
+    },
+    "@angular-devkit/architect": {
+      "optional": true
+    },
+    "esbuild": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "webpack": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@angular/core": "^21.0.0",
-    "@angular/build": "^21.1.1",
     "@angular-devkit/architect": "^0.2101.1",
+    "@angular/build": "^21.1.1",
+    "@angular/core": "^21.0.0",
+    "@types/babel__core": "^7.20.5",
     "esbuild": "^0.21.0",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
@@ -95,5 +128,17 @@
   },
   "homepage": "https://github.com/githumbi/angular-grab",
   "bugs": "https://github.com/githumbi/angular-grab/issues",
-  "keywords": ["angular", "angular-grab", "githumbi", "element-picker", "developer-tools", "ai", "esbuild", "vite", "webpack"]
+  "keywords": [
+    "angular",
+    "angular-grab",
+    "githumbi",
+    "element-picker",
+    "developer-tools",
+    "ai",
+    "esbuild",
+    "vite",
+    "webpack",
+    "react",
+    "babel"
+  ]
 }

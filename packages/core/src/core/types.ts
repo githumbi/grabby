@@ -47,6 +47,12 @@ export interface AngularGrabOptions {
   themeMode: ThemeMode;
   /** Auto-register MCP webhook plugin to POST grabs to localhost:3456. Default: true */
   mcpWebhook: boolean;
+  /**
+   * Where grabs are POSTed. Default: "http://localhost:3456/grab" (the local
+   * MCP server). Point it at a same-origin endpoint to collect grabs from a
+   * deployed site, where localhost isn't reachable.
+   */
+  webhookUrl: string;
   /** Persist history across page refresh via localStorage. Default: true */
   persistHistory: boolean;
 }

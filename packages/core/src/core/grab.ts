@@ -17,7 +17,7 @@ import { createElementPicker } from './picker/element-picker';
 import { createKeyboardHandler, isMac } from './keyboard/keyboard-handler';
 import { buildElementContext } from './clipboard/copy';
 import { createPluginRegistry } from './plugins/plugin-registry';
-import { createMcpWebhookPlugin } from './plugins/mcp-webhook-plugin';
+import { createMcpWebhookPlugin, DEFAULT_WEBHOOK_URL } from './plugins/mcp-webhook-plugin';
 import { createThemeManager } from './toolbar/theme-manager';
 import { createToolbarRenderer } from './toolbar/toolbar-renderer';
 import { createHistoryPopover } from './toolbar/history-popover';
@@ -56,6 +56,7 @@ function getDefaultOptions(): AngularGrabOptions {
     showToolbar: true,
     themeMode: 'light',
     mcpWebhook: true,
+    webhookUrl: DEFAULT_WEBHOOK_URL,
     persistHistory: true,
   };
 }
@@ -567,7 +568,7 @@ export function createGrabInstance(options?: Partial<AngularGrabOptions>): Angul
   });
 
   if (merged.mcpWebhook) {
-    api.registerPlugin(createMcpWebhookPlugin());
+    api.registerPlugin(createMcpWebhookPlugin(merged.webhookUrl));
   }
 
   return api;
