@@ -51,3 +51,14 @@ describe('resolveSource', () => {
     expect(resolveSource(el)).toEqual({ filePath: 'C:/app/src/App.tsx', line: 8, column: 4 });
   });
 });
+
+describe('ownStamp', () => {
+  it('reads the optional component name', async () => {
+    const { ownStamp } = await import('../stamp');
+    const el = document.createElement('th');
+    el.setAttribute('data-grabby-loc', 'src/pages/A.tsx:4:9:Table.HeaderCell');
+    expect(ownStamp(el)).toEqual({ file: 'src/pages/A.tsx', line: 4, column: 9, name: 'Table.HeaderCell' });
+    el.setAttribute('data-grabby-loc', 'src/pages/A.tsx:4:9');
+    expect(ownStamp(el)?.name).toBeNull();
+  });
+});

@@ -50,7 +50,10 @@ export function grabbyBabelPlugin(options: GrabbyBabelOptions = {}) {
           if (!loc) return;
 
           const relative = path.relative(rootDir, filename).split(path.sep).join('/');
-          const value = `${relative}:${loc.line}:${loc.column + 1}`;
+          // Components also record their name: production builds minify
+          // function names, so the fiber would only say "vu" or "M".
+          const component = componentName(node.name);
+          const value = `${relative}:${loc.line}:${loc.column + 1}${component ? `:${component}` : ''}`;
 
           node.attributes.unshift(
             t.jsxAttribute(t.jsxIdentifier(attribute), t.stringLiteral(value)),
@@ -59,6 +62,17 @@ export function grabbyBabelPlugin(options: GrabbyBabelOptions = {}) {
       },
     };
   };
+}
+
+/** `Card`, `Table.Row`: capitalised or member JSX names; native tags return null. */
+function componentName(name: any): string | null {
+  if (!name) return null;
+  if (name.type === 'JSXIdentifier') return /^[A-Z]/.test(name.name) ? name.name : null;
+  if (name.type === 'JSXMemberExpression') {
+    const object = name.object?.type === 'JSXIdentifier' ? name.object.name : componentName(name.object);
+    return object && name.property?.name ? `${object}.${name.property.name}` : null;
+  }
+  return null;
 }
 
 function elementName(name: any): string | null {

@@ -21,7 +21,7 @@ describe('grabbyBabelPlugin', () => {
 
   it('stamps component elements too, so the stamp rides the props spread', () => {
     const out = transform('const a = <Button>Save</Button>;');
-    expect(out).toContain('data-grabby-loc="src/pages/Dashboard.tsx:1:11"');
+    expect(out).toContain('data-grabby-loc="src/pages/Dashboard.tsx:1:11:Button"');
   });
 
   it('prepends the attribute so a later spread still wins', () => {
@@ -70,5 +70,19 @@ describe('grabbyBabelPlugin', () => {
   it('handles member-expression elements', () => {
     const out = transform('const a = <Card.Header />;');
     expect(out).toContain('data-grabby-loc');
+  });
+});
+
+describe('component names in stamps', () => {
+  it('records the name for components, not for native tags', async () => {
+    const babel = await import('@babel/core');
+    const { grabbyBabelPlugin } = await import('../index');
+    const out = babel.transformSync('const a = <Table.Row><Card /><div /></Table.Row>;', {
+      filename: '/app/src/A.jsx', babelrc: false, configFile: false,
+      parserOpts: { plugins: ['jsx'] }, plugins: [grabbyBabelPlugin({ rootDir: '/app' })],
+    })!.code!;
+    expect(out).toContain('data-grabby-loc="src/A.jsx:1:11:Table.Row"');
+    expect(out).toContain('data-grabby-loc="src/A.jsx:1:22:Card"');
+    expect(out).toContain('data-grabby-loc="src/A.jsx:1:30"');
   });
 });

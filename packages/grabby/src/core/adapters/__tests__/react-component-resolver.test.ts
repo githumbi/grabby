@@ -10,10 +10,12 @@ interface FakeFiber {
   child: FakeFiber | null;
   sibling: FakeFiber | null;
   memoizedProps: null;
+  _debugOwner?: null;
 }
 
+/** A development-build fiber (it has React's debug fields). */
 function fiber(type: unknown, stateNode: unknown = null): FakeFiber {
-  return { type, stateNode, return: null, child: null, sibling: null, memoizedProps: null };
+  return { type, stateNode, return: null, child: null, sibling: null, memoizedProps: null, _debugOwner: null };
 }
 
 /**
@@ -108,5 +110,30 @@ describe('getComponentName', () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.type = cyclic;
     expect(getComponentName(cyclic)).toBeNull();
+  });
+});
+
+describe('reactAdapter in production builds', () => {
+  // Production fibers have no debug fields, and function names are minified.
+  function prodFiber(type: unknown, stateNode: unknown = null) {
+    return { type, stateNode, return: null as unknown, child: null as unknown, sibling: null, memoizedProps: null };
+  }
+
+  it('names components from build stamps instead of minified function names', async () => {
+    const { reactAdapter } = await import('../react');
+    document.body.innerHTML = '<section data-grabby-loc="src/pages/Pricing.tsx:12:5"><table><thead><tr><th data-grabby-loc="src/pages/Pricing.tsx:40:9:TableHeaderCell">Plan</th></tr></thead></table></section>';
+    const th = document.querySelector('th')!;
+    const section = document.querySelector('section')!;
+    function vu() {}
+    function M() {}
+    const chain = [prodFiber('th', th), prodFiber(vu), prodFiber('section', section), prodFiber(M)];
+    chain.forEach((f, i) => { f.return = chain[i + 1] ?? null; f.child = chain[i - 1] ?? null; });
+    (chain[3] as { child: unknown }).child = chain[2];
+    Object.assign(th, { '__reactFiber$x': chain[0] });
+
+    const result = reactAdapter.resolveComponent(th)!;
+    expect(result.name).toBe('TableHeaderCell');
+    expect(result.stack!.map((s) => s.name)).toEqual(['TableHeaderCell', 'Pricing']);
+    document.body.innerHTML = '';
   });
 });
