@@ -39,20 +39,40 @@ pnpm --dir examples/react-vite dev        # try it in an app
 
 ## State (2026-09-26)
 
-All five milestones plus the follow-ups are merged into `main` (PR #1, merge commit `445c73a`, 203 tests): the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector, packaging, CI and docs, the CodeQL fixes, and live-mode **Finish review**. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`).
+Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all five milestones: the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector (with **Finish review**), and packaging, CI and docs. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`). PR #9 added supply-chain hardening (see `SECURITY.md`). 206 tests.
 
-**Published on npm** (2026-09-26): `@githumbi/grabby` 0.1.0 and `@githumbi/grabby-server` 0.1.0, under the npm org `githumbi` (owned by npm user `thumbi74`). Both have GitHub Actions trusted publishing set up for `release.yml`.
+**On npm** (org `githumbi`, owned by npm user `thumbi74`):
+- `@githumbi/grabby` **0.1.1**, the first release published by `release.yml` with provenance. 0.1.0 was published by hand.
+- `@githumbi/grabby-server` **0.1.0**.
+- Both packages use GitHub Actions trusted publishing with direct publish allowed, and tokens are disallowed.
 
-**`main` is protected**: changes go through a PR; `test (20/22/24)`, `audit` and `analyze` must pass, the branch must be up to date and conversations resolved; admins included; no force-push or deletion.
+**Supply chain.** Keep these intact:
+- **pnpm 10.33.4.** Don't use 10.34.x, which was published without provenance.
+- **`pnpm-workspace.yaml`:** no dependency install scripts (`strictDepBuilds`, all `allowBuilds` false), `minimumReleaseAge` of 7 days, `trustPolicy: no-downgrade` (for releases from the last 30 days) and `blockExoticSubdeps`.
+- **Actions are pinned to commit SHAs**, workflows start with `permissions: {}`, checkouts don't keep credentials, and zizmor runs in CI.
+- **`release.yml` is split:** build and test run in one job, and a separate publish job gets the built files as an artifact, uses no cache, and alone has `id-token: write`.
+- **Dependabot** has a 7-day cooldown (30 days for majors).
+- **The CLI pins exact versions** in everything it generates (`src/cli/versions.ts` gets them from `build-constants.ts` via tsup `define`).
 
-Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; Finish review with the collector going down and coming back; strict CSP + Trusted Types with zero violations; a packed tarball installed into a fresh Vite app.
+**Releasing:**
+1. Add a changeset to each PR that changes a published package.
+2. After a merge, `release.yml` pushes `changeset-release/main`. Its "create PR" step fails because the repo doesn't let Actions open PRs (kept off on purpose; a PR opened with the workflow token wouldn't run CI anyway).
+3. Open the "Version packages" PR from that branch by hand.
+4. Merging it publishes the new version.
 
-**Mobigrow portal** (`~/Documents/KCB work/Mobigrow/prototype`, repo `githumbi/mobigrow-portal`) uses Grabby via a vendored tarball (`vendor/githumbi-grabby-0.1.0-80950f4.tgz`, i.e. without the production component-name fix). It could now switch to `@githumbi/grabby` from npm. **Don't change the Mobigrow project unless the user asks**; they reverted the last update there.
+**`main` is protected:**
+- Changes only through a PR.
+- Required checks: `test (20/22/24)`, `audit`, `analyze` and `workflow security (zizmor)`.
+- The branch must be up to date and conversations resolved.
+- Admins included; no force-push or deletion.
+
+Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; Finish review with the collector going down and coming back; SRI against jsDelivr; strict CSP + Trusted Types with zero violations.
+
+**Mobigrow portal** (`~/Documents/KCB work/Mobigrow/prototype`, repo `githumbi/mobigrow-portal`) uses Grabby via a vendored tarball (`vendor/githumbi-grabby-0.1.0-80950f4.tgz`). It could now switch to `@githumbi/grabby` from npm. **Don't change the Mobigrow project unless the user asks**; they reverted the last update there.
 
 ## Next steps
 
-1. Releases: add a changeset (`pnpm changeset`) in each PR that changes a published package. Merging to `main` makes `release.yml` open a "Version packages" PR; merging that publishes to npm with provenance.
-2. Repo settings: enable private vulnerability reporting (SECURITY.md relies on it; it's off). One medium CodeQL alert is open by design (`js/http-to-file-access`, `cli.ts` `--out`); dismiss as won't fix.
-3. Optional: delete the merged `grabby-m1`…`grabby-m5` and `react-support` branches; rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`, which points at `angular-grab/...`).
+1. Dependabot #10 (Angular 22 devkit) doesn't fit Angular 21: close it and ignore `@angular-devkit/*` majors in `.github/dependabot.yml`.
+2. Optional: staged publishing (`npm stage publish` + 2FA approval) so even a compromised CI can't publish; dismiss the by-design CodeQL alert (`js/http-to-file-access`, `cli.ts` `--out`); delete the merged `grabby-m1`…`grabby-m5` and `react-support` branches; rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`).
 
 Backlog: a reviewer deleting an already-sent comment doesn't delete it on the collector; Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.
