@@ -7,14 +7,14 @@ import { SERVER_PACKAGE } from './versions';
 const HELP = `Grabby: point at any UI element, leave a comment, hand it to your AI agent.
 
 Usage
-  npx grabby init              Set up Grabby in this project (asks before changing files)
+  npx @githumbi/grabby init    Set up Grabby in this project (asks before changing files)
       --yes                    Apply without asking
       --dry-run                Only show what would change
       --no-install             Don't install the package
       --live --server <url> --key <pk_…>
                                Set up live-site feedback instead of local dev mode
-  npx grabby add mcp           Let your AI agent read comments over MCP (.mcp.json)
-  npx grabby pull [options]    Print collected comments for your agent (runs grabby-server pull)
+  npx @githumbi/grabby add mcp Let your AI agent read comments over MCP (.mcp.json)
+  npx @githumbi/grabby pull    Print collected comments for your agent (runs grabby-server pull)
 `;
 
 function fail(err: unknown): never {
