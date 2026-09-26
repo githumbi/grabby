@@ -101,6 +101,7 @@ describe('redact', () => {
     expect(sanitizeUrl('/docs?key=1#frag', 'https://app.test/')).toBe('/docs');
     expect(sanitizeUrl('https://cdn.test/img/a.png?sig=1', 'https://app.test/')).toBe('cdn.test/img/a.png');
     expect(sanitizeUrl('javascript:alert(1)', 'https://app.test/')).toBe('javascript:…');
+    expect(sanitizeUrl('VBScript:msgbox(1)', 'https://app.test/')).toBe('vbscript:…');
   });
 });
 

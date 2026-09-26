@@ -20,6 +20,8 @@ export interface PullResult {
 }
 
 const EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+/** Ids become file names, so a remote server must not be able to send '../x'. */
+const SAFE_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
  * Fetches open comments, points each one's screenshot at a file an agent can
@@ -39,7 +41,7 @@ export async function pull(source: CommentSource, options: PullOptions = {}): Pr
     let file: string | null = null;
     if (source instanceof LocalSource) {
       file = source.screenshotPath(c.id);
-    } else {
+    } else if (SAFE_ID.test(c.id)) {
       const shot = await source.screenshot(c.id);
       if (shot) {
         const dir = path.resolve(options.screenshotsDir ?? path.join('.grabby', 'screenshots'));

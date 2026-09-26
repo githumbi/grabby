@@ -7,7 +7,7 @@ import { createGrabbyServer, type GrabbyHttpServer } from '../http';
 import { CommentStore } from '../store';
 import { LocalSource, RemoteSource } from '../source';
 import { pull } from '../pull';
-import type { ServerConfig } from '../config';
+import { initConfig, trimTrailingSlashes, type ServerConfig } from '../config';
 
 const SITE = 'https://shop.example';
 const PK = 'pk_testtesttesttest';
@@ -190,5 +190,37 @@ describe('grabby-server', () => {
       expect((await pull(local, { after: 'delete' })).count).toBe(1);
       expect(store.list({ status: 'all' })).toHaveLength(0);
     });
+
+    it('never uses an unsafe id from a remote server as a file name', async () => {
+      const evil = { list: async () => [{ ...comment(), id: '../../escape', status: 'open', screenshot: { type: 'image/webp', width: 1, height: 1 } }], screenshot: async () => ({ type: 'image/webp', data: WEBP }), setStatus: async () => {}, remove: async () => {}, describe: () => 'evil' };
+      const shots = path.join(dir, 'pulled');
+      const result = await pull(evil as never, { screenshotsDir: shots });
+      expect(result.screenshots).toBe(0);
+      expect(existsSync(path.resolve(shots, '../../escape.webp'))).toBe(false);
+    });
+  });
+});
+
+describe('config', () => {
+  it('trims trailing slashes without a regex', () => {
+    expect(trimTrailingSlashes('http://x.test///')).toBe('http://x.test');
+    expect(trimTrailingSlashes('///')).toBe('');
+    expect(trimTrailingSlashes(`a${'/'.repeat(50_000)}b`)).toBe(`a${'/'.repeat(50_000)}b`);
+  });
+
+  it('initConfig keeps an existing file unless forced', () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'grabby-init-'));
+    try {
+      const first = initConfig({ dataDir });
+      expect(first.created).toBe(true);
+      const again = initConfig({ dataDir });
+      expect(again.created).toBe(false);
+      expect(again.config.adminToken).toBe(first.config.adminToken);
+      const forced = initConfig({ dataDir, force: true });
+      expect(forced.created).toBe(true);
+      expect(forced.config.adminToken).not.toBe(first.config.adminToken);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

@@ -57,7 +57,7 @@ export function sanitizeRoute(loc: { pathname: string; search: string; hash: str
 export function sanitizeUrl(raw: string, base: string = typeof location !== 'undefined' ? location.href : 'http://localhost/'): string {
   try {
     const url = new URL(raw, base);
-    if (url.protocol === 'javascript:' || url.protocol === 'data:') return `${url.protocol}…`;
+    if (url.protocol === 'javascript:' || url.protocol === 'data:' || url.protocol === 'vbscript:') return `${url.protocol}…`;
     const baseUrl = new URL(base);
     const path = url.pathname + (url.hash.startsWith('#/') ? url.hash : '');
     return redact(url.origin === baseUrl.origin ? path : `${url.host}${path}`);

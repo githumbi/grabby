@@ -40,6 +40,13 @@ function loadJobs(): Job[] {
   }
 }
 
+/** Loop, not /\/+$/, which backtracks badly on long runs of slashes. */
+function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 /**
  * Comments are saved in the browser first and delivered from here, so a
  * flaky connection or a server restart never costs anyone their feedback.
@@ -47,7 +54,7 @@ function loadJobs(): Job[] {
  * browser comes back online.
  */
 export function createOutbox(deps: OutboxDeps): Outbox {
-  const base = deps.server.replace(/\/+$/, '');
+  const base = trimTrailingSlashes(deps.server);
   // A new page is a fresh chance: retry restored jobs right away.
   let jobs = loadJobs().map((j) => ({ ...j, next: 0 }));
   let timer: ReturnType<typeof setTimeout> | null = null;

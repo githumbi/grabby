@@ -38,11 +38,18 @@ export function configPath(dataDir: string, explicit?: string): string {
   return explicit || process.env.GRABBY_CONFIG || path.join(dataDir, 'config.json');
 }
 
+/** Loop, not /\/+$/, which backtracks badly on long runs of slashes. */
+export function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 function normalizeOrigin(origin: string): string {
   try {
     return new URL(origin).origin;
   } catch {
-    return origin.replace(/\/+$/, '');
+    return trimTrailingSlashes(origin);
   }
 }
 
@@ -129,9 +136,6 @@ export interface InitOptions {
 export function initConfig(options: InitOptions = {}): { file: string; config: ServerConfig; created: boolean } {
   const dataDir = options.dataDir || defaultDataDir();
   const file = configPath(dataDir, options.config);
-  if (existsSync(file) && !options.force) {
-    return { file, config: loadConfig({ dataDir, config: options.config }), created: false };
-  }
   const config: ServerConfig = {
     version: 1,
     public: false,
@@ -149,7 +153,13 @@ export function initConfig(options: InitOptions = {}): { file: string; config: S
   mkdirSync(path.dirname(file), { recursive: true });
   const { dataDir: _omit, ...onDisk } = config;
   void _omit;
-  writeFileSync(file, `${JSON.stringify(onDisk, null, 2)}\n`, { mode: 0o600 });
+  try {
+    // 'wx' fails if the file exists, so checking and creating are one step.
+    writeFileSync(file, `${JSON.stringify(onDisk, null, 2)}\n`, { mode: 0o600, flag: options.force ? 'w' : 'wx' });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    return { file, config: loadConfig({ dataDir, config: options.config }), created: false };
+  }
   try { chmodSync(file, 0o600); } catch { /* not supported on this filesystem */ }
   return { file, config, created: true };
 }

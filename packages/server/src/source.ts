@@ -1,4 +1,5 @@
 import type { CommentStore, StoredComment, ListFilter } from './store';
+import { trimTrailingSlashes } from './config';
 
 export type SourceComment = Omit<StoredComment, 'screenshotFile'>;
 
@@ -71,7 +72,7 @@ export class RemoteSource implements CommentSource {
   private readonly base: string;
 
   constructor(serverUrl: string, private readonly token: string) {
-    this.base = serverUrl.replace(/\/+$/, '');
+    this.base = trimTrailingSlashes(serverUrl);
   }
 
   describe(): string {
