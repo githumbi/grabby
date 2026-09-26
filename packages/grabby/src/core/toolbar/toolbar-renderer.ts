@@ -12,6 +12,7 @@ export interface ToolbarCallbacks {
   onHistory: () => void;
   onEnableToggle: () => void;
   onDismiss: () => void;
+  onFinish?: () => void;
 }
 
 export interface ToolbarRenderer {
@@ -29,6 +30,22 @@ export interface ToolbarOptions {
   dismissLabel?: string;
   /** Leave out the enable/disable switch (reviewers on a live site don't need it). */
   hideEnable?: boolean;
+  /** Show delivery status and a "Finish review" button (live mode). */
+  review?: boolean;
+}
+
+/** One line for the toolbar: how the reviewer's comments are getting on. */
+export function syncSummary(comments: GrabState['toolbar']['comments']): { text: string; tone: 'ok' | 'busy' | 'error' } | null {
+  if (comments.length === 0) return null;
+  let pending = 0;
+  let failed = 0;
+  for (const c of comments) {
+    if (c.sync === 'pending') pending++;
+    else if (c.sync === 'failed') failed++;
+  }
+  if (failed) return { text: `${failed} not sent`, tone: 'error' };
+  if (pending) return { text: 'Sending…', tone: 'busy' };
+  return { text: `${comments.length} sent`, tone: 'ok' };
 }
 
 export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: ToolbarOptions = {}): ToolbarRenderer {
@@ -37,6 +54,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
   let buttons: Record<string, HTMLButtonElement> = {};
   let allElements = new Set<Element>();
   let badge: HTMLSpanElement | null = null;
+  let status: HTMLSpanElement | null = null;
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -130,6 +148,30 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         opacity: 1;
         transition: max-width 0.25s ease, opacity 0.2s ease, margin 0.25s ease;
       }
+      #${TOOLBAR_ID} .grabby-toolbar-status {
+        padding: 0 6px;
+        font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        white-space: nowrap;
+        color: #15803d;
+      }
+      #${TOOLBAR_ID} .grabby-toolbar-status[data-tone="ok"]::before { content: "✓ "; }
+      #${TOOLBAR_ID} .grabby-toolbar-status[data-tone="busy"] { color: var(--grabby-toolbar-text, #64748b); }
+      #${TOOLBAR_ID} .grabby-toolbar-status[data-tone="error"] { color: #b91c1c; }
+      #${TOOLBAR_ID} .grabby-toolbar-status[hidden],
+      #${TOOLBAR_ID} button[hidden] { display: none; }
+      #${TOOLBAR_ID} button.grabby-btn-finish {
+        width: auto;
+        padding: 0 14px;
+        margin-left: 2px;
+        border-radius: 16px;
+        font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--grabby-accent, #2563eb);
+        color: #fff;
+      }
+      #${TOOLBAR_ID} button.grabby-btn-finish:hover {
+        background: var(--grabby-accent-hover, #1d4ed8);
+        color: #fff;
+      }
       #${TOOLBAR_ID} .grabby-toolbar-left.grabby-toolbar-left-hidden {
         max-width: 0;
         opacity: 0;
@@ -186,6 +228,26 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     leftGroup.appendChild(divider);
 
     container.appendChild(leftGroup);
+    if (options.review) {
+      status = document.createElement('span');
+      status.className = 'grabby-toolbar-status';
+      status.setAttribute('role', 'status');
+      status.hidden = true;
+      buttons.finish = document.createElement('button');
+      buttons.finish.type = 'button';
+      buttons.finish.className = 'grabby-btn-finish';
+      buttons.finish.textContent = 'Finish review';
+      buttons.finish.setAttribute('data-grabby-btn', 'finish');
+      buttons.finish.hidden = true;
+      buttons.finish.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        callbacks.onFinish?.();
+      });
+      container.appendChild(status);
+      container.appendChild(buttons.finish);
+      allElements.add(status);
+    }
     if (!options.hideEnable) container.appendChild(buttons.enable);
     container.appendChild(buttons.dismiss);
 
@@ -229,6 +291,14 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
       }
       buttons.history.setAttribute('aria-label', count ? `Comments (${count})` : 'Comments');
 
+      if (status && buttons.finish) {
+        const summary = syncSummary(state.toolbar.comments);
+        status.hidden = !summary;
+        status.textContent = summary?.text ?? '';
+        status.dataset.tone = summary?.tone ?? '';
+        buttons.finish.hidden = count === 0;
+      }
+
       if (state.options.enabled) {
         buttons.enable.classList.add('grabby-btn-active');
         leftGroup?.classList.remove('grabby-toolbar-left-hidden');
@@ -258,6 +328,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
       leftGroup = null;
       buttons = {};
       badge = null;
+      status = null;
       allElements.clear();
     },
   };

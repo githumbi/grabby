@@ -175,7 +175,7 @@ initGrabbyLive({ server: 'https://feedback.your-site.com', projectKey: 'pk_…' 
 
 **3. Share the feedback link:** `https://your-site.com/?grabby=pk_…`
 
-Reviewers get a **Comment** button and a short three-step tip. After their first comment, Grabby asks who it's from: a name, or **Post anonymously**. The choice is remembered, and anonymous reviewers still get a stable id, so you can tell "Anonymous 3f9a" from "Anonymous b21c". If your app already knows who's signed in, skip the question with `grabby.identify({ id, name })`. Comments are saved in the browser first and retried until they reach your collector, so a bad connection doesn't lose them. Reviewers leave feedback mode with ✕.
+Reviewers get a **Comment** button and a short three-step tip. After their first comment, Grabby asks who it's from: a name, or **Post anonymously**. The choice is remembered, and anonymous reviewers still get a stable id, so you can tell "Anonymous 3f9a" from "Anonymous b21c". If your app already knows who's signed in, skip the question with `grabby.identify({ id, name })`. Each comment is sent as soon as it's saved: it's kept in the browser first and retried until it reaches your collector, so a bad connection doesn't lose it. The toolbar shows how many were sent, and closing the tab with a half-typed or unsent comment brings up the browser's "Leave site?" prompt. When they're done, reviewers press **Finish review** to see what reached you; **Done** clears their list and keeps the toolbar for another round. They leave feedback mode with ✕, which opens the same summary first if anything is still sending.
 
 **4. Pull the feedback into your agent:**
 

@@ -25,7 +25,7 @@ pnpm --dir examples/react-vite dev        # try it in an app
 - `core/capture/`: `kind.ts` (action/field/text/media/container/section + promote icon→button), `facts.ts` (per-kind facts), `preview.ts` (≤300-char HTML preview), `styles.ts` (diff vs browser defaults), `redact.ts`, `export.ts` (Copy all / pull / MCP text), `screenshot.ts` (lazy modern-screenshot, Trusted-Types-safe sandbox).
 - `core/adapters/`: React, Angular, Vue 2/3, Svelte 4/5, DOM, composed per element; `stamp.ts` reads `data-grabby-loc="file:line:col[:ComponentName]"`.
 - `core/ui/`: everything renders in one `<grabby-root>` shadow root; `dom.ts` `h()` builder (no `innerHTML`, ever).
-- `core/sync/outbox.ts`: delivery to a collector with retries; `core/live/activation.ts`: `?grabby=<projectKey>` feedback links.
+- `core/sync/outbox.ts`: delivery to a collector with retries (keepalive, plus a last try on pagehide); `core/live/activation.ts`: `?grabby=<projectKey>` feedback links; `core/toolbar/finish-sheet.ts`: the live **Finish review** summary (Done clears sent comments and keeps the toolbar).
 - `plugin/`: unplugin build plugin (JSX/TSX + Vue SFC stamping, dev-only unless `includeSourceInBuild`).
 - `live.ts` / `core/loader.global.ts`: lazy entry and ~500 B script loader for live sites.
 
@@ -39,7 +39,7 @@ pnpm --dir examples/react-vite dev        # try it in an app
 
 ## State (2026-09-26)
 
-All five milestones are built, tested (187 tests) and committed on stacked branches; `grabby-m5` is pushed with a PR into `main`:
+All five milestones are built, tested (203 tests) and committed on stacked branches; `grabby-m5` is pushed with a PR into `main`:
 `grabby-m1` rename + security → `grabby-m2` capture + Copy & clear → `grabby-m3` adapters + plugin → `grabby-m4` live mode + server → `grabby-m5` packaging, CI, docs, plus two fixes found on the Mobigrow portal (short hover label; real component names in production React builds). `grabby-m5` contains everything; `main` and `react-support` are still at the old angular-grab code (`2c7a9f7`).
 
 Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; strict CSP + Trusted Types with zero violations; a packed tarball installed into a fresh Vite app.

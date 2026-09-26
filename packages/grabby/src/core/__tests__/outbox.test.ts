@@ -86,4 +86,20 @@ describe('outbox', () => {
     expect(localStorage.getItem('grabby:v1:outbox')).toBeNull();
     second.outbox.dispose();
   });
+
+  it('sends with keepalive, and flushOnExit re-sends what is still queued', async () => {
+    const c = makeComment();
+    const init: RequestInit[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, i: RequestInit) => { init.push(i); return new Response('nope', { status: 503 }); }));
+    const { outbox } = setup(c);
+    outbox.send(c.id);
+    await flush();
+    expect(init[0].keepalive).toBe(true);
+    outbox.flushOnExit();
+    expect(init).toHaveLength(2);
+    expect(init[1]).toMatchObject({ method: 'POST', keepalive: true });
+    // Still queued, so the next visit tries again.
+    expect(JSON.parse(localStorage.getItem('grabby:v1:outbox')!)).toHaveLength(1);
+    outbox.dispose();
+  });
 });

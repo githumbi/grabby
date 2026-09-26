@@ -21,6 +21,7 @@ import { createToolbarRenderer } from './toolbar/toolbar-renderer';
 import { createCommentsPanel } from './toolbar/comments-panel';
 import { createCommentPopover } from './toolbar/comment-popover';
 import { createCopySheet, type CopyMode } from './toolbar/copy-sheet';
+import { createFinishSheet, type ReviewCounts } from './toolbar/finish-sheet';
 import { createCoachMark } from './toolbar/coach-mark';
 import { createOutbox, type Outbox, type SyncState } from './sync/outbox';
 import { consumeFeedbackLink, startFeedbackSession, endFeedbackSession } from './live/activation';
@@ -243,6 +244,18 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     store.state.toolbar = { ...store.state.toolbar, comments: next };
     toolbar.update(store.state);
     commentsPanel.refresh(next);
+    finishSheet.update(reviewCounts());
+  }
+
+  function reviewCounts(): ReviewCounts {
+    const list = comments();
+    const count = (state: SyncState) => list.filter((c) => c.sync === state).length;
+    return { total: list.length, sent: count('sent'), pending: count('pending'), failed: count('failed') };
+  }
+
+  /** Something the reviewer would lose, or that hasn't reached the team yet. */
+  function hasUnsentWork(): boolean {
+    return commentPopover.hasDraft() || (!!outbox && comments().some((c) => c.sync === 'pending'));
   }
 
   function exportText(list: GrabbyComment[], lvl: DetailLevel): string {
@@ -274,9 +287,10 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   function setSync(id: string, state: SyncState): void {
     const current = comments().find((c) => c.id === id);
     if (!current || current.sync === state) return;
-    setComments(comments().map((c) => (c.id === id ? { ...c, sync: state } : c)));
+    // Toast first: finishing a review from setComments shows its own, which should win.
     if (live && state === 'sent') showToast('Feedback sent. Thank you!');
     if (live && state === 'failed') showToast('Your feedback couldn\'t be sent. Please try again later.');
+    setComments(comments().map((c) => (c.id === id ? { ...c, sync: state } : c)));
   }
 
   function toastDetail(c: GrabbyComment): ToastDetail {
@@ -419,6 +433,27 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     commentsPanel.hide();
     commentPopover.hide();
     copySheet.close();
+    finishSheet.close();
+  }
+
+  function openFinishSheet(): void {
+    if (finishSheet.isVisible()) {
+      finishSheet.close();
+      return;
+    }
+    closeAllPopovers();
+    doDeactivate(true);
+    finishSheet.open(reviewCounts());
+  }
+
+  function exitFeedbackMode(): void {
+    closeAllPopovers();
+    coachMark.dismiss();
+    doDeactivate(true);
+    store.state.toolbar = { ...store.state.toolbar, visible: false };
+    toolbar.hide();
+    // Leaving feedback mode on a live site: the next page load is a normal visit.
+    if (live) endFeedbackSession();
   }
 
   // --- Picker ---
@@ -517,15 +552,17 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
 
     onDismiss() {
-      closeAllPopovers();
-      coachMark.dismiss();
-      doDeactivate(true);
-      store.state.toolbar = { ...store.state.toolbar, visible: false };
-      toolbar.hide();
-      // Leaving feedback mode on a live site: the next page load is a normal visit.
-      if (live) endFeedbackSession();
+      // Don't let a reviewer walk away from comments that haven't arrived.
+      const { pending, failed } = reviewCounts();
+      if (live && outbox && (pending || failed)) {
+        openFinishSheet();
+        return;
+      }
+      exitFeedbackMode();
     },
-  }, live ? { label: 'Comment', dismissLabel: 'Exit feedback mode', hideEnable: true } : {});
+
+    onFinish: openFinishSheet,
+  }, live ? { label: 'Comment', dismissLabel: 'Exit feedback mode', hideEnable: true, review: !!merged.server } : {});
 
   // --- Comments panel ---
   const commentsPanel = createCommentsPanel({
@@ -595,6 +632,33 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
   });
 
+  // --- Finish review (live) ---
+  const finishSheet = createFinishSheet({
+    onDone() {
+      // The team has these now. Clear them so the reviewer starts a fresh
+      // round, but keep anything still on its way (or its screenshot).
+      const done = comments().filter((c) => c.sync === 'sent' && !outbox?.isQueued(c.id)).map((c) => c.id);
+      if (!comments().length) {
+        exitFeedbackMode();
+        return;
+      }
+      removeComments(done, null);
+      const left = comments().length;
+      showToast(left
+        ? `Thanks for your review! ${left} comment${left === 1 ? ' is' : 's are'} still sending.`
+        : 'Thanks for your review! Your feedback was sent.');
+    },
+    onRetry() {
+      const failed = comments().filter((c) => c.sync === 'failed');
+      if (failed.length) {
+        const ids = new Set(failed.map((c) => c.id));
+        setComments(comments().map((c) => (ids.has(c.id) ? { ...c, sync: 'pending' as const } : c)));
+        for (const id of ids) outbox?.send(id);
+      }
+      outbox?.flush();
+    },
+  });
+
   // --- Comment popover ---
   const commentPopover = createCommentPopover({
     onSubmit(value, ctx, identity) {
@@ -634,7 +698,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     const target = eventTarget(e);
     if (!target) return;
     if (isAnyToolbarElement(target)) return;
-    if (commentsPanel.isVisible() || commentPopover.isVisible() || copySheet.isVisible()) {
+    if (commentsPanel.isVisible() || commentPopover.isVisible() || copySheet.isVisible() || finishSheet.isVisible()) {
       closeAllPopovers();
     }
   }
@@ -645,12 +709,22 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // mobile case where pagehide isn't guaranteed to run.
   function handlePageHide(): void {
     flushPendingWrite();
+    outbox?.flushOnExit();
   }
   function handleVisibilityChange(): void {
     if (document.visibilityState === 'hidden') flushPendingWrite();
   }
   window.addEventListener('pagehide', handlePageHide);
   document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  // Closing the tab mid-comment, or before comments reach the team, gets the
+  // browser's own "Leave site?" prompt.
+  function handleBeforeUnload(e: BeforeUnloadEvent): void {
+    if (!live || !hasUnsentWork()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  }
+  window.addEventListener('beforeunload', handleBeforeUnload);
 
   function updateToastOffset(): void {
     if (store.state.toolbar.visible) {
@@ -674,7 +748,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   function handleEscapeKey(e: KeyboardEvent): void {
     if (e.key !== 'Escape') return;
     if (isEditableElement(eventTarget(e))) return;
-    if (commentPopover.isVisible() || copySheet.isVisible()) return;
+    if (commentPopover.isVisible() || copySheet.isVisible() || finishSheet.isVisible()) return;
     if (commentsPanel.isVisible()) {
       commentsPanel.hide();
       e.preventDefault();
@@ -796,6 +870,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       doDeactivate(true);
       document.removeEventListener('click', handleDocumentClick);
       window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', handleFreezeKey, true);
       document.removeEventListener('keydown', handleEscapeKey, true);
@@ -812,6 +887,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       commentsPanel.dispose();
       commentPopover.dispose();
       copySheet.dispose();
+      finishSheet.dispose();
       coachMark.dispose();
       outbox?.dispose();
       themeManager.dispose();

@@ -35,6 +35,8 @@ export interface CommentPopover {
   show(opts: CommentShowOpts): void;
   hide(): void;
   isVisible(): boolean;
+  /** Typed (or edited) but not saved yet. */
+  hasDraft(): boolean;
   isPopoverElement(el: Element): boolean;
   dispose(): void;
 }
@@ -49,6 +51,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
   let stage: 'comment' | 'identity' = 'comment';
   let pendingValue = '';
   let nameInput: HTMLInputElement | null = null;
+  let initialValue = '';
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -277,7 +280,8 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     show(opts: CommentShowOpts): void {
       doHide();
       const el = ensurePopover();
-      textarea!.value = opts.initialValue ?? '';
+      initialValue = opts.initialValue ?? '';
+      textarea!.value = initialValue;
       currentCtx = { mode: opts.mode, entryId: opts.entryId };
       askIdentity = opts.askIdentity === true && opts.mode === 'new';
       visible = true;
@@ -295,6 +299,12 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       doHide();
     },
     isVisible(): boolean { return visible; },
+    hasDraft(): boolean {
+      if (!visible) return false;
+      if (stage === 'identity') return true;
+      const v = textarea?.value.trim() ?? '';
+      return v !== '' && v !== initialValue.trim();
+    },
     isPopoverElement(el: Element): boolean {
       if (!popover) return false;
       let cur: Element | null = el;

@@ -15,6 +15,12 @@ export interface Outbox {
   send(id: string): void;
   /** Queue just the screenshot, for when it's captured after the comment was sent. */
   sendScreenshot(id: string): void;
+  /** Still has work for this comment (the comment itself or its screenshot). */
+  isQueued(id: string): boolean;
+  /** Retry everything queued now instead of waiting out the backoff. */
+  flush(): void;
+  /** The page is going away: one last try that outlives the tab. */
+  flushOnExit(): void;
   dispose(): void;
 }
 
@@ -29,6 +35,8 @@ const STORE_KEY = 'grabby:v1:outbox';
 /** 2s, 10s, 30s, 2m, 5m, then every 10m. */
 const BACKOFF = [2_000, 10_000, 30_000, 120_000, 300_000, 600_000];
 const MAX_ATTEMPTS = 20;
+/** Browsers cap keepalive bodies at 64 KB in total; stay under it. */
+const KEEPALIVE_MAX = 60_000;
 
 function loadJobs(): Job[] {
   try {
@@ -92,17 +100,24 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     return rest;
   }
 
+  function postComment(comment: GrabbyComment): Promise<Response> {
+    const body = JSON.stringify({ comment: wireShape(comment) });
+    return fetch(`${base}/v1/comments`, {
+      method: 'POST',
+      credentials: 'omit',
+      // keepalive lets a send that's under way finish after the tab closes.
+      keepalive: body.length < KEEPALIVE_MAX,
+      headers: headers({ 'Content-Type': 'application/json' }),
+      body,
+    });
+  }
+
   async function deliver(job: Job): Promise<'done' | 'retry' | 'drop'> {
     const comment = deps.getComment(job.id);
     if (!comment) return 'drop'; // deleted before it was sent
 
     if (job.kind === 'comment') {
-      const res = await fetch(`${base}/v1/comments`, {
-        method: 'POST',
-        credentials: 'omit',
-        headers: headers({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ comment: wireShape(comment) }),
-      });
+      const res = await postComment(comment);
       if (res.ok) {
         // Re-read: the screenshot often finishes rendering while the POST is
         // in flight, and sendScreenshot() skips while this job is queued.
@@ -121,6 +136,7 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     const res = await fetch(`${base}/v1/comments/${encodeURIComponent(job.id)}/screenshot?w=${width}&h=${height}`, {
       method: 'PUT',
       credentials: 'omit',
+      keepalive: blob.size < KEEPALIVE_MAX,
       headers: headers({ 'Content-Type': blob.type || 'image/webp', 'X-Grabby-Session': comment.author.sessionId }),
       body: blob,
     });
@@ -171,6 +187,17 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     sendScreenshot: (id) => {
       // If the comment itself is still queued, it will queue its screenshot.
       if (!jobs.some((j) => j.id === id && j.kind === 'comment')) add(id, 'shot');
+    },
+    isQueued: (id) => jobs.some((j) => j.id === id),
+    flush: onOnline,
+    flushOnExit() {
+      // Jobs stay queued: if these don't land, the next visit sends them. A
+      // repeat from the same session is an edit on the server, not a duplicate.
+      for (const job of jobs) {
+        if (job.kind !== 'comment') continue;
+        const comment = deps.getComment(job.id);
+        if (comment) postComment(comment).catch(() => {});
+      }
     },
     dispose() {
       disposed = true;
