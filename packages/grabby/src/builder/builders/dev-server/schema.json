@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Grabby Dev Server Builder",
+  "description": "Wraps @angular/build:dev-server with grabby source injection",
+  "type": "object",
+  "additionalProperties": true
+}

@@ -35,9 +35,9 @@ importers:
       '@angular/router':
         specifier: ^21.1.0
         version: 21.2.1(@angular/common@21.2.1(@angular/core@21.2.1(@angular/compiler@21.2.1)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.1(@angular/compiler@21.2.1)(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@21.2.1(@angular/common@21.2.1(@angular/core@21.2.1(@angular/compiler@21.2.1)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@21.2.1(@angular/compiler@21.2.1)(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)
-      '@githumbi/angular-grab':
+      '@githumbi/grabby':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/grabby
       rxjs:
         specifier: ~7.8.0
         version: 7.8.2
@@ -64,7 +64,7 @@ importers:
         specifier: ^4.0.8
         version: 4.0.18(@types/node@25.3.4)(jsdom@27.4.0)(sass@1.97.3)(terser@5.46.0)
 
-  packages/core:
+  packages/grabby:
     dependencies:
       '@babel/core':
         specifier: ^7.24.0
@@ -101,7 +101,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.3.4)(jsdom@27.4.0)(sass@1.97.3)(terser@5.46.0)
 
-  packages/mcp-server:
+  packages/server:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4

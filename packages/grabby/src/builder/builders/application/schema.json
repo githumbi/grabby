@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Grabby Application Builder",
+  "description": "Wraps @angular/build:application with grabby source injection",
+  "type": "object",
+  "additionalProperties": true
+}
