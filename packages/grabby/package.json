@@ -143,9 +143,9 @@
     "clean": "node -e \"const fs=require('fs');['dist','README.md'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch{}})\""
   },
   "dependencies": {
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.6",
     "modern-screenshot": "^4.7.0",
-    "unplugin": "^2.3.11"
+    "unplugin": "^3.4.0"
   },
   "peerDependencies": {
     "@angular-devkit/architect": ">=0.1800.0",
