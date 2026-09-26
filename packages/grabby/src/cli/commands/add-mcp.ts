@@ -1,9 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-
-// Pinned to a major version: an MCP server runs with your editor's
-// permissions, so it shouldn't silently jump to whatever @latest becomes.
-const MCP_PACKAGE = '@githumbi/grabby-server@0';
+import { SERVER_PACKAGE as MCP_PACKAGE } from '../versions';
 const MCP_SERVER_NAME = 'grabby';
 
 function log(msg: string): void {

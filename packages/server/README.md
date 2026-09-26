@@ -61,13 +61,13 @@ Locally there are no keys: it only listens on 127.0.0.1, only accepts pages serv
 4. Pull feedback:
 
    ```bash
-   npx @githumbi/grabby-server pull --server https://feedback.your-site.com --token sk_…
+   npx -y @githumbi/grabby-server@0.1.0 pull --server https://feedback.your-site.com --token sk_…
    ```
 
    Or give your agent the deployed collector over MCP:
 
    ```json
-   { "mcpServers": { "grabby": { "command": "npx", "args": ["-y", "@githumbi/grabby-server@0", "mcp", "--server", "https://feedback.your-site.com"], "env": { "GRABBY_ADMIN_TOKEN": "sk_…" } } }
+   { "mcpServers": { "grabby": { "command": "npx", "args": ["-y", "@githumbi/grabby-server@0.1.0", "mcp", "--server", "https://feedback.your-site.com"], "env": { "GRABBY_ADMIN_TOKEN": "sk_…" } } }
    ```
 
 ## Configuration

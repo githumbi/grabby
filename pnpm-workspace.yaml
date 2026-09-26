@@ -1,3 +1,34 @@
 packages:
   - "packages/*"
   - "examples/*"
+
+# Supply-chain protections (pnpm 10.26+). Most npm worms of 2025–2026
+# (Shai-Hulud, axios, CHAINDROP) ran from a dependency's install script
+# minutes after a hijacked release, so:
+
+# No dependency may run install scripts. Everything builds and tests
+# without them; a new dependency that wants one fails the install until
+# it's reviewed here.
+strictDepBuilds: true
+allowBuilds:
+  esbuild: false            # postinstall only speeds up the binary lookup
+  '@parcel/watcher': false  # Angular dev-server deps; prebuilt binaries work
+  lmdb: false
+  msgpackr-extract: false
+
+# Don't install versions published less than 7 days ago. Hijacked releases
+# are usually caught and pulled within hours.
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - '@githumbi/*'
+
+# Fail if a package that was published with provenance / trusted publishing
+# suddenly isn't (typical of a stolen token).
+trustPolicy: no-downgrade
+# Only for releases from the last 30 days: that's when a hijacked version is
+# live. Older releases (e.g. maintenance releases of an old major published
+# without provenance) have long been vetted by the ecosystem.
+trustPolicyIgnoreAfter: 43200
+
+# Transitive dependencies may only come from the registry, not git or URLs.
+blockExoticSubdeps: true

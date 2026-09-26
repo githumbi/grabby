@@ -163,7 +163,7 @@ npx @githumbi/grabby-server start --public
 ></script>
 ```
 
-Pin an exact version. To guard against a compromised CDN, add Subresource Integrity: `integrity` and `crossorigin="anonymous"` on the loader tag cover the loader, and `data-integrity` covers the full build it fetches. jsDelivr shows both hashes on the package's file pages.
+Pin an exact version (never a range like `@0.1`: a range would serve a hijacked release to every visitor the moment it's published), and add Subresource Integrity so a tampered CDN copy won't run: `integrity` and `crossorigin="anonymous"` cover the loader, and `data-integrity` covers the full build it fetches. `npx grabby init --live --server … --key … --dry-run` prints this tag with both hashes filled in.
 
 or with a bundler:
 
@@ -180,7 +180,7 @@ Reviewers get a **Comment** button and a short three-step tip. After their first
 **4. Pull the feedback into your agent:**
 
 ```bash
-npx @githumbi/grabby-server pull --server https://feedback.your-site.com --token sk_…
+npx -y @githumbi/grabby-server@0.1.0 pull --server https://feedback.your-site.com --token sk_…
 ```
 
 This prints every open comment, grouped by file and labelled by author, and saves the screenshots to `./.grabby/screenshots/` where your agent can open them. The comments are then marked resolved, so the next pull shows only new feedback. Use `--keep` to leave them open or `--delete` to remove them.
@@ -239,6 +239,7 @@ Mark parts of your page:
 - **The UI is isolated** in a shadow root and built without `innerHTML`, so page CSS can't break it and nothing a user types can run as code. It works under strict CSP (`style-src 'self'`) and Trusted Types.
 - **The collector** stays on localhost unless started with `--public`, and then refuses to start without an admin token, a project key and a list of allowed sites. The public key can only add comments; reading, resolving and deleting need the admin token. Input is validated and size-capped, screenshots are checked by their bytes, only the browser that wrote a comment can attach its screenshot, and requests are rate-limited. Locally, it rejects DNS-rebinding attempts.
 - **Comments are user input.** MCP results tell your agent to treat them as data, not instructions. Review what an agent does with feedback from people you don't know.
+- **Supply chain.** Neither package has install scripts. Everything Grabby generates for you is pinned to an exact version: the `.mcp.json` entry and `grabby pull` run one specific `@githumbi/grabby-server` release (re-run `npx grabby add mcp` after upgrading to move it), and the CDN tag from `grabby init` carries integrity hashes. Releases are built in CI and published with npm trusted publishing and provenance; see [SECURITY.md](SECURITY.md#how-releases-are-protected) for how the repository itself is hardened.
 
 Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 

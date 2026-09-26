@@ -8,7 +8,7 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.33.4",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -19,8 +19,10 @@
     "changeset": "changeset"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.1",
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^25.9.8",
-    "turbo": "^2.11.4"
+    "publint": "^0.3.24",
+    "turbo": "^2.11.2"
   }
 }
