@@ -4,6 +4,7 @@ import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 const OVERLAY_ID = '__grabby-overlay__';
 const LABEL_ID = '__grabby-label__';
 const STYLE_ID = '__grabby-styles__';
+const MAX_LABEL_CLASSES = 3;
 
 export interface OverlayRenderer {
   show(element: Element, componentName: string | null, sourcePath?: string | null, cssClasses?: string[]): void;
@@ -45,7 +46,7 @@ export function createOverlayRenderer(): OverlayRenderer {
         border-radius: 3px;
         white-space: nowrap;
         box-sizing: border-box;
-        max-width: 100vw;
+        max-width: min(100vw, 560px);
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -86,8 +87,11 @@ export function createOverlayRenderer(): OverlayRenderer {
 
     const tag = currentElement.tagName.toLowerCase();
     let labelText = `<${tag}>`;
+    // Utility-class pages (Tailwind) can carry dozens of classes; a few are
+    // enough to recognise the element without the label spanning the page.
     if (currentCssClasses.length > 0) {
-      labelText += ` .${currentCssClasses.join('.')}`;
+      const shown = currentCssClasses.slice(0, MAX_LABEL_CLASSES);
+      labelText += ` .${shown.join('.')}${currentCssClasses.length > shown.length ? '…' : ''}`;
     }
     if (currentComponentName) {
       labelText += ` in ${currentComponentName}`;
