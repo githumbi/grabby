@@ -27,6 +27,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
   let leftGroup: HTMLDivElement | null = null;
   let buttons: Record<string, HTMLButtonElement> = {};
   let allElements = new Set<Element>();
+  let badge: HTMLSpanElement | null = null;
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -73,6 +74,23 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
         background: var(--grabby-toolbar-hover, #f1f5f9);
         color: var(--grabby-accent, #2563eb);
       }
+      #${TOOLBAR_ID} button { position: relative; }
+      #${TOOLBAR_ID} .grabby-badge {
+        position: absolute;
+        top: 1px;
+        right: 1px;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        border-radius: 8px;
+        background: var(--grabby-accent, #2563eb);
+        color: #fff;
+        font: 700 9px/15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        text-align: center;
+        pointer-events: none;
+      }
+      #${TOOLBAR_ID} .grabby-badge[hidden] { display: none; }
       #${TOOLBAR_ID} button.grabby-btn-active {
         color: var(--grabby-toolbar-active, #2563eb);
       }
@@ -129,8 +147,12 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
     container.setAttribute('role', 'toolbar');
     container.setAttribute('aria-label', 'Grabby toolbar');
 
-    buttons.selection = createButton('selection', ICON_GRAB, 'Selection mode', callbacks.onSelectionMode);
-    buttons.history = createButton('history', ICON_HISTORY, 'History', callbacks.onHistory);
+    buttons.selection = createButton('selection', ICON_GRAB, 'Comment on an element (Alt+G)', callbacks.onSelectionMode);
+    buttons.history = createButton('history', ICON_HISTORY, 'Comments', callbacks.onHistory);
+    badge = document.createElement('span');
+    badge.className = 'grabby-badge';
+    badge.hidden = true;
+    buttons.history.appendChild(badge);
     buttons.enable = createButton('enable', ICON_POWER, 'Enable/Disable', callbacks.onEnableToggle);
     buttons.dismiss = createButton('dismiss', ICON_DISMISS, 'Dismiss toolbar', callbacks.onDismiss);
 
@@ -180,6 +202,13 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
         buttons.selection.classList.remove('grabby-btn-active');
       }
 
+      const count = state.toolbar.comments.length;
+      if (badge) {
+        badge.hidden = count === 0;
+        badge.textContent = count > 99 ? '99+' : String(count);
+      }
+      buttons.history.setAttribute('aria-label', count ? `Comments (${count})` : 'Comments');
+
       if (state.options.enabled) {
         buttons.enable.classList.add('grabby-btn-active');
         leftGroup?.classList.remove('grabby-toolbar-left-hidden');
@@ -208,6 +237,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
       container = null;
       leftGroup = null;
       buttons = {};
+      badge = null;
       allElements.clear();
     },
   };

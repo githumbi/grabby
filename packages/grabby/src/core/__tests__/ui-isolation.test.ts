@@ -1,30 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createHistoryPopover } from '../toolbar/history-popover';
+import { createCommentsPanel } from '../toolbar/comments-panel';
 import { showToast, disposeToast } from '../overlay/toast';
 import { init } from '../grab';
 import { getUiRoot, getUiHost, disposeUiRoot, HOST_TAG } from '../ui/root';
-import type { GrabbyAPI, HistoryEntry } from '../types';
+import type { GrabbyAPI, GrabbyComment } from '../types';
+import { makeComment, makeTarget } from './fixtures';
 
 const PAYLOAD = '"><img src=x onerror="window.__pwned=1">';
 
-function entry(comment: string, filePath: string | null = null): HistoryEntry {
-  return {
-    id: `id-${comment.length}`,
-    context: {
-      html: '<div></div>',
-      componentName: PAYLOAD,
-      filePath,
-      line: 1,
-      column: 1,
-      componentStack: [],
-      selector: 'div',
-      cssClasses: [],
-    },
-    snippet: '',
-    timestamp: Date.now(),
+function entry(comment: string, file: string): GrabbyComment {
+  return makeComment({
     comment,
-  };
+    author: { name: PAYLOAD, anonymous: false, sessionId: 's' },
+    target: makeTarget({ component: PAYLOAD, source: { file, line: 1, column: 1 }, selector: 'div' }),
+  });
 }
 
 describe('UI rendering never parses data as markup', () => {
@@ -35,21 +25,21 @@ describe('UI rendering never parses data as markup', () => {
     delete (window as unknown as Record<string, unknown>).__pwned;
   });
 
-  it('renders a hostile comment, component name and file path in history as text', () => {
-    const popover = createHistoryPopover({ onEntryClick: vi.fn(), onEntryHover: vi.fn(), onClearAll: vi.fn() });
-    popover.show([entry(PAYLOAD, `/src/${PAYLOAD}.ts`)]);
+  it('renders a hostile comment, author, component and file path in the panel as text', () => {
+    const panel = createCommentsPanel({ onEdit: vi.fn(), onHover: vi.fn(), onDelete: vi.fn(), onCopyAll: vi.fn(), onClearAll: vi.fn() });
+    panel.show([entry(PAYLOAD, `/src/${PAYLOAD}.ts`)]);
 
     const root = getUiRoot();
     expect(root.querySelector('img')).toBeNull();
     expect(root.textContent).toContain(PAYLOAD);
-    const row = root.querySelector('.grabby-history-item')!;
-    expect(row.getAttribute('aria-label')).toBe(`Edit comment for ${PAYLOAD}`);
+    const row = root.querySelector('.grabby-comment-row')!;
+    expect(row.getAttribute('aria-label')).toBe(`Edit comment: ${PAYLOAD}`);
     expect(row.hasAttribute('onerror')).toBe(false);
-    popover.dispose();
+    panel.dispose();
   });
 
   it('renders a hostile toast detail as text', () => {
-    showToast(PAYLOAD, { componentName: PAYLOAD, filePath: PAYLOAD, line: 1, column: 1, cssClasses: [PAYLOAD] });
+    showToast(PAYLOAD, { detail: { componentName: PAYLOAD, filePath: PAYLOAD, line: 1, column: 1, cssClasses: [PAYLOAD] }, actions: [{ label: PAYLOAD, onClick: () => {} }] });
     const root = getUiRoot();
     expect(root.querySelector('img')).toBeNull();
     expect(root.textContent).toContain(PAYLOAD);

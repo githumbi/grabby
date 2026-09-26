@@ -26,7 +26,7 @@ export function createStore(initialOptions: GrabbyOptions): Store {
     toolbar: {
       visible: initialOptions.showToolbar,
       themeMode: initialOptions.themeMode,
-      history: [],
+      comments: [],
     },
   };
 

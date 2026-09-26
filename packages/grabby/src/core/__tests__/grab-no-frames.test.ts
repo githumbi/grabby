@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { queryUi, getUiRoot, deepActiveElement, disposeUiRoot } from '../ui/root';
 import { createCommentPopover } from '../toolbar/comment-popover';
 import { saveHistory, flushPendingWrite, STORAGE_KEY } from '../storage/history-persistence';
-import type { HistoryEntry } from '../types';
+import type { GrabbyComment } from '../types';
+import { makeComment } from './fixtures';
 
 /**
  * A tab that is backgrounded, occluded or simply between frames gets no
@@ -32,17 +33,8 @@ describe('when no animation frame ever fires', () => {
     localStorage.clear();
   });
 
-  function entry(comment: string): HistoryEntry {
-    return {
-      id: comment,
-      snippet: 's',
-      timestamp: 1,
-      comment,
-      context: {
-        html: '<b/>', componentName: null, filePath: null, line: null, column: null,
-        componentStack: [], selector: 'b', cssClasses: [],
-      },
-    };
+  function entry(comment: string): GrabbyComment {
+    return makeComment({ id: comment, comment });
   }
 
   it('still writes history, via the timer fallback', () => {
@@ -72,7 +64,7 @@ describe('when no animation frame ever fires', () => {
 
     popover.show({ anchor, mode: 'new' });
 
-    expect(deepActiveElement()).toBe(queryUi('textarea'));
+    expect(deepActiveElement()).toBe(queryUi<HTMLTextAreaElement>('textarea'));
     popover.dispose();
   });
 
@@ -83,7 +75,7 @@ describe('when no animation frame ever fires', () => {
     document.body.appendChild(anchor);
 
     popover.show({ anchor, mode: 'new' });
-    const ta = queryUi('textarea')!;
+    const ta = queryUi<HTMLTextAreaElement>('textarea')!;
     ta.value = 'typed anyway';
     ta.blur();
     (document.body as HTMLElement).focus();
@@ -103,7 +95,7 @@ describe('when no animation frame ever fires', () => {
     document.body.append(anchor, other);
 
     popover.show({ anchor, mode: 'new' });
-    queryUi('textarea')!.value = 'not mine';
+    queryUi<HTMLTextAreaElement>('textarea')!.value = 'not mine';
     other.focus();
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));

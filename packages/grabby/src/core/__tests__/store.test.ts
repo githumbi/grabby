@@ -4,17 +4,21 @@ import type { GrabbyOptions } from '../types';
 
 function makeOptions(overrides: Partial<GrabbyOptions> = {}): GrabbyOptions {
   return {
-    activationKey: 'Meta+C',
-    activationMode: 'hold',
+    activationKey: 'Alt+G',
+    activationMode: 'toggle',
     keyHoldDuration: 0,
-    maxContextLines: 20,
     enabled: true,
     enableInInputs: false,
     devOnly: true,
     showToolbar: true,
     themeMode: 'light',
     mcpWebhook: false,
+    webhookUrl: 'http://localhost:3456/grab',
     persistHistory: false,
+    copyOnComment: false,
+    detailLevel: 'standard',
+    screenshots: false,
+    captureQueryParams: [],
     ...overrides,
   };
 }
@@ -30,7 +34,7 @@ describe('createStore', () => {
     expect(store.state.options).toBe(opts);
     expect(store.state.toolbar.visible).toBe(true);
     expect(store.state.toolbar.themeMode).toBe('light');
-    expect(store.state.toolbar.history).toEqual([]);
+    expect(store.state.toolbar.comments).toEqual([]);
   });
 
   it('respects showToolbar=false in options', () => {
@@ -112,40 +116,4 @@ describe('createStore', () => {
     expect(receivedState.frozen).toBe(true);
   });
 
-  it('HistoryEntry type allows optional comment field', () => {
-    const entry: import('../types').HistoryEntry = {
-      id: 'x',
-      context: {
-        html: '',
-        componentName: null,
-        filePath: null,
-        line: null,
-        column: null,
-        componentStack: [],
-        selector: 'div',
-        cssClasses: [],
-      },
-      snippet: '',
-      timestamp: 0,
-      comment: 'hello',
-    };
-    expect(entry.comment).toBe('hello');
-
-    const entryNoComment: import('../types').HistoryEntry = {
-      id: 'y',
-      context: {
-        html: '',
-        componentName: null,
-        filePath: null,
-        line: null,
-        column: null,
-        componentStack: [],
-        selector: 'div',
-        cssClasses: [],
-      },
-      snippet: '',
-      timestamp: 0,
-    };
-    expect(entryNoComment.comment).toBeUndefined();
-  });
 });

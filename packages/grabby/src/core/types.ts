@@ -1,29 +1,81 @@
 export type ThemeMode = 'light';
 
-/** Serializable subset of ElementContext — no live DOM reference. */
-export interface HistoryContext {
-  html: string;
-  componentName: string | null;
-  filePath: string | null;
+/** What kind of UI the comment is about; decides which facts get captured. */
+export type TargetKind = 'action' | 'field' | 'text' | 'media' | 'container' | 'section';
+
+/** How much context the export includes. */
+export type DetailLevel = 'compact' | 'standard' | 'detailed';
+
+export interface SourceLocation {
+  file: string;
   line: number | null;
   column: number | null;
-  componentStack: ComponentStackEntry[];
-  selector: string;
-  cssClasses: string[];
 }
 
-export interface HistoryEntry {
+export interface StackFrame {
+  name: string;
+  file: string | null;
+  line: number | null;
+}
+
+/** The compact, serialisable description of the element a comment is about. */
+export interface GrabbyTarget {
+  kind: TargetKind;
+  tag: string;
+  component: string | null;
+  source: SourceLocation | null;
+  /** Up to 3 of the app's own component frames, innermost first. */
+  stack: StackFrame[];
+  /** Unique CSS selector. Exported only when there is no source location. */
+  selector: string;
+  /** Trimmed opening tag plus a text excerpt, at most ~300 characters. */
+  preview: string;
+  /** Kind-specific facts for the standard export, in display order. */
+  facts: Record<string, string>;
+  /** Extra facts only shown at the detailed level. */
+  extra: Record<string, string>;
+}
+
+export interface CommentAuthor {
+  name: string | null;
+  anonymous: boolean;
+  /** Stable random id per browser, so anonymous commenters stay distinguishable. */
+  sessionId: string;
+}
+
+export interface PageInfo {
+  /** Pathname only; query strings are dropped unless allowlisted. */
+  route: string;
+  title: string;
+  viewport: [number, number];
+}
+
+export interface ScreenshotRef {
+  /** Key of the image in this browser's IndexedDB. */
+  localId?: string;
+  /** Where a server stored it, once uploaded. */
+  url?: string;
+  width: number;
+  height: number;
+}
+
+export interface GrabbyComment {
   id: string;
-  context: HistoryContext;
-  snippet: string;
-  timestamp: number;
-  comment?: string;
+  createdAt: number;
+  updatedAt: number;
+  status: 'open' | 'resolved';
+  comment: string;
+  author: CommentAuthor;
+  page: PageInfo;
+  target: GrabbyTarget;
+  screenshot: ScreenshotRef | null;
+  framework: string;
 }
 
 export interface ToolbarState {
   visible: boolean;
   themeMode: ThemeMode;
-  history: HistoryEntry[];
+  comments: GrabbyComment[];
 }
 
 export interface GrabbyOptions {
@@ -33,8 +85,6 @@ export interface GrabbyOptions {
   activationMode: 'hold' | 'toggle';
   /** Milliseconds to hold before activating in hold mode. Default: 0 */
   keyHoldDuration: number;
-  /** Max lines of HTML to include in copied context. Default: 20 */
-  maxContextLines: number;
   /** Master on/off switch. Default: true */
   enabled: boolean;
   /** Allow activation while focused in input/textarea. Default: false */
@@ -53,8 +103,19 @@ export interface GrabbyOptions {
    * deployed site, where localhost isn't reachable.
    */
   webhookUrl: string;
-  /** Persist history across page refresh via localStorage. Default: true */
+  /** Persist comments across page refresh via localStorage. Default: true */
   persistHistory: boolean;
+  /**
+   * Also copy each comment to the clipboard as soon as it's saved. Default:
+   * false: comments collect until you use Copy all.
+   */
+  copyOnComment: boolean;
+  /** Default detail level for exports. Default: 'standard' */
+  detailLevel: DetailLevel;
+  /** Capture a screenshot of the commented element. Default: true */
+  screenshots: boolean;
+  /** Query parameters worth keeping in the recorded route, e.g. ['tab']. Default: [] */
+  captureQueryParams: string[];
   /**
    * CSP nonce for Grabby's `<style>` elements. Only used in browsers without
    * constructable stylesheets; elsewhere styles need no CSP allowance.
@@ -85,18 +146,18 @@ export interface PluginHooks {
   onActivate?: () => void;
   onDeactivate?: () => void;
   onElementHover?: (element: Element) => void;
-  onElementSelect?: (context: ElementContext) => void;
-  onBeforeCopy?: (context: ElementContext) => void;
+  onElementSelect?: (element: Element) => void;
   /**
-   * A grab was recorded, with its comment. Fires whether or not the clipboard
-   * write then succeeded, so use this — not `onCopySuccess` — to persist or
-   * forward grabs. The clipboard can reject for reasons that have nothing to
-   * do with the grab, such as the document not being focused.
+   * A comment was saved. Fires whether or not anything reached the clipboard,
+   * so use this to persist or forward comments.
    */
-  onGrab?: (text: string, context: ElementContext, comment?: string) => void;
-  onCopySuccess?: (text: string, context: ElementContext, prompt?: string) => void;
+  onComment?: (comment: GrabbyComment, element: Element | null) => void;
+  /** A saved comment gained its screenshot (it's captured asynchronously). */
+  onScreenshot?: (comment: GrabbyComment, image: Blob) => void;
+  onCopySuccess?: (text: string, comments: GrabbyComment[]) => void;
   onCopyError?: (error: Error) => void;
-  transformCopyContent?: (text: string, context: ElementContext) => string;
+  /** Rewrite exported text before it reaches the clipboard. */
+  transformCopyContent?: (text: string, comments: GrabbyComment[]) => string;
 }
 
 export interface Theme {
@@ -149,7 +210,11 @@ export interface GrabbyAPI {
   showToolbar(): void;
   hideToolbar(): void;
   setThemeMode(mode: ThemeMode): void;
-  getHistory(): HistoryEntry[];
-  clearHistory(): void;
+  /** Open comments, newest first. */
+  getComments(): GrabbyComment[];
+  /** Export text for the given (default: all) comments at a detail level. */
+  exportComments(options?: { level?: DetailLevel; ids?: string[] }): string;
+  deleteComment(id: string): void;
+  clearComments(): void;
   dispose(): void;
 }

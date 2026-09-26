@@ -9,6 +9,19 @@ const TOAST_STYLE_ID = '__grabby-toast-styles__';
 // Note: toast state is shared across instances (module-level singleton)
 let activeTimer: ReturnType<typeof setTimeout> | null = null;
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
+export interface ToastOptions {
+  detail?: ToastDetail;
+  actions?: ToastAction[];
+  /** Milliseconds before it hides. Default 3500, or 8000 when there are actions. */
+  duration?: number;
+}
+
 export interface ToastDetail {
   componentName: string | null;
   filePath: string | null;
@@ -39,6 +52,37 @@ function injectToastStyles(): void {
       letter-spacing: 0.01em;
       max-width: 480px;
       min-width: 260px;
+    }
+    #${TOAST_ID} .grabby-toast-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      padding-left: 12px;
+    }
+    #${TOAST_ID} .grabby-toast-action {
+      pointer-events: auto;
+      font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--grabby-border, #e2e8f0);
+      background: transparent;
+      color: var(--grabby-accent, #2563eb);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #${TOAST_ID}:not(.grabby-toast-visible) .grabby-toast-action {
+      pointer-events: none;
+    }
+    #${TOAST_ID} .grabby-toast-action:hover {
+      background: var(--grabby-surface, #f1f5f9);
+    }
+    #${TOAST_ID} .grabby-toast-action-primary {
+      background: var(--grabby-accent, #2563eb);
+      border-color: var(--grabby-accent, #2563eb);
+      color: #fff;
+    }
+    #${TOAST_ID} .grabby-toast-action-primary:hover {
+      background: var(--grabby-accent-hover, #1d4ed8);
     }
     #${TOAST_ID}.grabby-toast-visible {
       transform: translateX(-50%) translateY(0);
@@ -123,8 +167,10 @@ function row(label: string, value: Node | string): HTMLDivElement {
   );
 }
 
-export function showToast(message: string, detail?: ToastDetail, durationMs = 3500): void {
+export function showToast(message: string, opts: ToastOptions = {}): void {
   const toast = getOrCreateToast();
+  const { detail, actions } = opts;
+  const durationMs = opts.duration ?? (actions?.length ? 8000 : 3500);
 
   const children: Node[] = [
     h('div', { class: 'grabby-toast-header' },
@@ -150,6 +196,20 @@ export function showToast(message: string, detail?: ToastDetail, durationMs = 35
     children.push(details);
   }
 
+  if (actions?.length) {
+    children[0].appendChild(h('span', { class: 'grabby-toast-actions' },
+      ...actions.map((a) => h('button', {
+        type: 'button',
+        class: a.primary ? 'grabby-toast-action grabby-toast-action-primary' : 'grabby-toast-action',
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          hideToast();
+          a.onClick();
+        },
+      }, a.label)),
+    ));
+  }
+
   toast.replaceChildren(...children);
 
   if (activeTimer) {
@@ -167,6 +227,14 @@ export function showToast(message: string, detail?: ToastDetail, durationMs = 35
     toast.classList.remove('grabby-toast-visible');
     activeTimer = null;
   }, durationMs);
+}
+
+export function hideToast(): void {
+  if (activeTimer) {
+    clearTimeout(activeTimer);
+    activeTimer = null;
+  }
+  toastEl?.classList.remove('grabby-toast-visible');
 }
 
 export function disposeToast(): void {

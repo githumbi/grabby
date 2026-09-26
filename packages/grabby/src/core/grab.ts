@@ -1,13 +1,12 @@
 import type {
   GrabbyOptions,
   GrabbyAPI,
+  GrabbyComment,
   Plugin,
   ComponentResolver,
   SourceResolver,
-  ElementContext,
-  HistoryContext,
-  HistoryEntry,
   ThemeMode,
+  DetailLevel,
 } from './types';
 import { createStore } from './store';
 import { createOverlayRenderer } from './overlay/overlay-renderer';
@@ -15,36 +14,31 @@ import { createCrosshair } from './overlay/crosshair';
 import { showToast, disposeToast, type ToastDetail } from './overlay/toast';
 import { createElementPicker } from './picker/element-picker';
 import { createKeyboardHandler } from './keyboard/keyboard-handler';
-import { buildElementContext } from './clipboard/copy';
 import { createPluginRegistry } from './plugins/plugin-registry';
 import { createMcpWebhookPlugin, DEFAULT_WEBHOOK_URL } from './plugins/mcp-webhook-plugin';
 import { createThemeManager } from './toolbar/theme-manager';
 import { createToolbarRenderer } from './toolbar/toolbar-renderer';
-import { createHistoryPopover } from './toolbar/history-popover';
+import { createCommentsPanel } from './toolbar/comments-panel';
 import { createCommentPopover } from './toolbar/comment-popover';
-import { buildCommentSnippet, formatMultiSessionClipboard } from './toolbar/copy-actions';
-import type { GrabSession } from './toolbar/copy-actions';
+import { createCopySheet, type CopyMode } from './toolbar/copy-sheet';
 import { createFreezeOverlay } from './overlay/freeze-overlay';
 import { showSelectFeedback, disposeFeedbackStyles } from './overlay/select-feedback';
 import { TOOLBAR_TOAST_OFFSET } from './constants';
 import { safeQuery } from './utils';
 import { isUiNode, eventTarget, isEditableElement, disposeUiRoot, setStyleNonce } from './ui/root';
 import { loadHistory, saveHistory, clearPersistedHistory, flushPendingWrite } from './storage/history-persistence';
+import { putScreenshot, deleteScreenshots } from './storage/screenshot-store';
+import { captureTarget } from './capture/capture';
+import { captureScreenshot, type Screenshot } from './capture/screenshot';
+import { formatExport } from './capture/export';
+import { sanitizeRoute } from './capture/redact';
+import { disposeStyleBaseline } from './capture/styles';
+import { randomId, currentAuthor, loadIdentity } from './identity/session';
 
-const MAX_HISTORY = 50;
-
-function toHistoryContext(ctx: ElementContext): HistoryContext {
-  return {
-    html: ctx.html,
-    componentName: ctx.componentName,
-    filePath: ctx.filePath,
-    line: ctx.line,
-    column: ctx.column,
-    componentStack: ctx.componentStack,
-    selector: ctx.selector,
-    cssClasses: ctx.cssClasses,
-  };
-}
+const MAX_COMMENTS = 200;
+const LEVEL_KEY = 'grabby:v1:level';
+/** How long an Undo stays on offer after comments are cleared or deleted. */
+const UNDO_MS = 8000;
 
 function getDefaultOptions(): GrabbyOptions {
   return {
@@ -52,7 +46,6 @@ function getDefaultOptions(): GrabbyOptions {
     activationKey: 'Alt+G',
     activationMode: 'toggle',
     keyHoldDuration: 0,
-    maxContextLines: 20,
     enabled: true,
     enableInInputs: false,
     devOnly: true,
@@ -61,6 +54,10 @@ function getDefaultOptions(): GrabbyOptions {
     mcpWebhook: true,
     webhookUrl: DEFAULT_WEBHOOK_URL,
     persistHistory: true,
+    copyOnComment: false,
+    detailLevel: 'standard',
+    screenshots: true,
+    captureQueryParams: [],
   };
 }
 
@@ -87,6 +84,27 @@ export function isDevMode(): boolean {
   return true;
 }
 
+/** Placeholder until framework adapters report their own name. */
+function detectFramework(): string {
+  try {
+    if ((window as unknown as { ng?: unknown }).ng) return 'Angular';
+    if (document.querySelector('[data-grabby-loc]')) return 'React';
+  } catch { /* ignore */ }
+  return 'HTML';
+}
+
+function loadLevel(fallback: DetailLevel): DetailLevel {
+  try {
+    const v = localStorage.getItem(LEVEL_KEY);
+    if (v === 'compact' || v === 'standard' || v === 'detailed') return v;
+  } catch { /* ignore */ }
+  return fallback;
+}
+
+function saveLevel(level: DetailLevel): void {
+  try { localStorage.setItem(LEVEL_KEY, level); } catch { /* ignore */ }
+}
+
 /** No-op API returned when devOnly is true and the app is in production. */
 export function createNoopApi(): GrabbyAPI {
   const noop = () => {};
@@ -103,8 +121,10 @@ export function createNoopApi(): GrabbyAPI {
     showToolbar: noop,
     hideToolbar: noop,
     setThemeMode: noop,
-    getHistory: () => [],
-    clearHistory: noop,
+    getComments: () => [],
+    exportComments: () => '',
+    deleteComment: noop,
+    clearComments: noop,
     dispose: noop,
   };
 }
@@ -120,11 +140,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   setStyleNonce(merged.styleNonce);
   const store = createStore(merged);
 
-  // Seed history from localStorage (if enabled)
+  // Seed comments from localStorage (if enabled)
   if (merged.persistHistory) {
     const persisted = loadHistory();
     if (persisted.length > 0) {
-      store.state.toolbar = { ...store.state.toolbar, history: persisted };
+      store.state.toolbar = { ...store.state.toolbar, comments: persisted };
     }
   }
 
@@ -136,94 +156,168 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   let componentResolver: ComponentResolver | null = null;
   let sourceResolver: SourceResolver | null = null;
+  const framework: string | null = null;
 
-  // Per-instance state for last selected element (not in store to avoid serialization issues)
-  let lastSelectedElement: WeakRef<Element> | null = null;
-  let lastSelectedContext: ElementContext | null = null;
-  let grabSessions: GrabSession[] = [];
-  let idCounter = 0;
+  // The element being commented on and its screenshot, captured the moment
+  // it was clicked, before anything on the page can change.
+  let selectedElement: Element | null = null;
+  let pendingShot: Promise<Screenshot | null> | null = null;
+  let level = loadLevel(merged.detailLevel);
 
-  function nextId(): string {
-    return `grabby-${++idCounter}-${Date.now()}`;
-  }
+  // Screenshot deletions wait out the Undo window.
+  const pendingShotDeletes = new Map<string, ReturnType<typeof setTimeout>>();
 
-  // Apply initial theme
   themeManager.apply(store.state.toolbar.themeMode);
-
-  // Set toast bottom offset when toolbar is visible
   updateToastOffset();
 
-  // --- Multi-session clipboard accumulation ---
-  async function accumulateAndCopy(context: ElementContext, comment: string): Promise<boolean> {
-    const maxLines = store.state.options.maxContextLines;
-    const snippet = buildCommentSnippet(context, maxLines, pluginRegistry);
+  function comments(): GrabbyComment[] {
+    return store.state.toolbar.comments;
+  }
 
-    const lastSession = grabSessions[grabSessions.length - 1];
-    if (lastSession && lastSession.comment === comment) {
-      lastSession.snippets.push(snippet);
-    } else {
-      grabSessions.push({ comment, snippets: [snippet] });
-    }
+  function setComments(next: GrabbyComment[]): void {
+    store.state.toolbar = { ...store.state.toolbar, comments: next };
+    toolbar.update(store.state);
+    commentsPanel.refresh(next);
+  }
 
-    const formatted = formatMultiSessionClipboard(grabSessions);
+  function exportText(list: GrabbyComment[], lvl: DetailLevel): string {
+    const text = formatExport(list, lvl, { origin: location.host });
+    return pluginRegistry.callTransformHook(text, list);
+  }
 
-    // Record the grab before going near the clipboard. writeText rejects
-    // whenever the document isn't focused, and the comment is the user's work —
-    // losing it because a clipboard permission lapsed is never right.
-    addHistoryEntry(context, snippet, comment);
-    pluginRegistry.callHook('onGrab', formatted, context, comment);
+  function toastDetail(c: GrabbyComment): ToastDetail {
+    return {
+      componentName: c.target.component,
+      filePath: c.target.source?.file ?? null,
+      line: c.target.source?.line ?? null,
+      column: c.target.source?.column ?? null,
+    };
+  }
 
-    const detail: ToastDetail = {
-      componentName: context.componentName,
-      filePath: context.filePath,
-      line: context.line,
-      column: context.column,
-      cssClasses: context.cssClasses,
+  // --- Saving a new comment ---
+  function saveComment(element: Element, text: string, shot: Promise<Screenshot | null> | null): GrabbyComment {
+    const now = Date.now();
+    const comment: GrabbyComment = {
+      id: randomId(),
+      createdAt: now,
+      updatedAt: now,
+      status: 'open',
+      comment: text,
+      author: currentAuthor(loadIdentity()),
+      page: {
+        route: sanitizeRoute(location, store.state.options.captureQueryParams),
+        title: document.title,
+        viewport: [window.innerWidth, window.innerHeight],
+      },
+      target: captureTarget(element, { componentResolver, sourceResolver }),
+      screenshot: null,
+      framework: framework ?? detectFramework(),
     };
 
+    setComments([comment, ...comments()].slice(0, MAX_COMMENTS));
+    pluginRegistry.callHook('onComment', comment, element);
+
+    if (shot) void attachScreenshot(comment.id, shot);
+
+    const count = comments().length;
+    const copyAction = { label: count === 1 ? 'Copy' : `Copy all ${count}`, onClick: openCopySheet, primary: true };
+    if (store.state.options.copyOnComment) {
+      void writeClipboard(exportText([comment], level)).then((ok) => {
+        showToast(ok ? 'Comment saved and copied' : 'Comment saved (clipboard blocked)', {
+          detail: toastDetail(comment),
+          actions: count > 1 ? [copyAction] : [],
+        });
+      });
+    } else {
+      showToast(count === 1 ? 'Comment saved' : `Comment saved · ${count} total`, {
+        detail: toastDetail(comment),
+        actions: [copyAction],
+      });
+    }
+    return comment;
+  }
+
+  async function attachScreenshot(id: string, shot: Promise<Screenshot | null>): Promise<void> {
+    const result = await shot;
+    if (!result) return;
+    await putScreenshot(id, result.blob);
+    const current = comments().find((c) => c.id === id);
+    if (!current) {
+      // Deleted while the screenshot was rendering.
+      void deleteScreenshots([id]);
+      return;
+    }
+    const updated: GrabbyComment = { ...current, screenshot: { localId: id, width: result.width, height: result.height } };
+    setComments(comments().map((c) => (c.id === id ? updated : c)));
+    pluginRegistry.callHook('onScreenshot', updated, result.blob);
+  }
+
+  // --- Removing comments, with Undo ---
+  function removeComments(ids: string[], message: string | null): void {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const before = comments();
+    const removed = before.filter((c) => idSet.has(c.id));
+    setComments(before.filter((c) => !idSet.has(c.id)));
+
+    const shotIds = removed.flatMap((c) => (c.screenshot?.localId ? [c.screenshot.localId] : []));
+    const key = randomId();
+    pendingShotDeletes.set(key, setTimeout(() => {
+      pendingShotDeletes.delete(key);
+      void deleteScreenshots(shotIds);
+    }, UNDO_MS + 500));
+
+    if (!message) return;
+    showToast(message, {
+      duration: UNDO_MS,
+      actions: [{
+        label: 'Undo',
+        onClick: () => {
+          clearTimeout(pendingShotDeletes.get(key));
+          pendingShotDeletes.delete(key);
+          const present = new Set(comments().map((c) => c.id));
+          const restored = [...removed.filter((c) => !present.has(c.id)), ...comments()]
+            .sort((a, b) => b.createdAt - a.createdAt);
+          setComments(restored);
+          showToast(`Restored ${removed.length} comment${removed.length === 1 ? '' : 's'}`);
+        },
+      }],
+    });
+  }
+
+  // --- Clipboard ---
+  async function writeClipboard(text: string): Promise<boolean> {
     try {
-      await navigator.clipboard.writeText(formatted);
-      showToast('Copied with comment', detail);
-      pluginRegistry.callHook('onCopySuccess', formatted, context, comment);
+      await navigator.clipboard.writeText(text);
       return true;
     } catch (err) {
-      // The grab is already saved, so say that rather than failing silently.
-      showToast('Saved to history — clipboard blocked', detail);
       pluginRegistry.callHook('onCopyError', err instanceof Error ? err : new Error(String(err)));
       return false;
     }
   }
 
-  // --- Toolbar element check (aggregates all toolbar-related UI) ---
+  function openCopySheet(): void {
+    const list = comments();
+    if (list.length === 0) {
+      showToast('No comments to copy yet');
+      return;
+    }
+    closeAllPopovers();
+    copySheet.open({
+      count: list.length,
+      level,
+      render: (lvl) => exportText(list, lvl),
+    });
+  }
+
   function isAnyToolbarElement(el: Element): boolean {
-    return isUiNode(el)
-      || toolbar.isToolbarElement(el)
-      || historyPopover.isPopoverElement(el)
-      || commentPopover.isPopoverElement(el)
-      || freezeOverlay.isFreezeElement(el);
+    return isUiNode(el) || freezeOverlay.isFreezeElement(el);
   }
 
-  // --- History management ---
-  function addHistoryEntry(context: ElementContext, snippet: string, comment?: string): void {
-    const entry: HistoryEntry = {
-      id: nextId(),
-      context: toHistoryContext(context),
-      snippet,
-      timestamp: Date.now(),
-      comment,
-    };
-
-    lastSelectedElement = new WeakRef(context.element);
-    lastSelectedContext = context;
-
-    const history = [entry, ...store.state.toolbar.history].slice(0, MAX_HISTORY);
-    store.state.toolbar = { ...store.state.toolbar, history };
-  }
-
-  // --- Close all popovers ---
   function closeAllPopovers(): void {
-    historyPopover.hide();
+    commentsPanel.hide();
     commentPopover.hide();
+    copySheet.close();
   }
 
   // --- Picker ---
@@ -240,10 +334,10 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         pluginRegistry.callHook('onElementHover', element);
       }
     },
-    async onSelect(element) {
-      const context = buildElementContext(element, componentResolver, sourceResolver);
-      lastSelectedElement = new WeakRef(element);
-      lastSelectedContext = context;
+    onSelect(element) {
+      selectedElement = element;
+      pendingShot = store.state.options.screenshots ? captureScreenshot(element) : null;
+      pluginRegistry.callHook('onElementSelect', element);
       showSelectFeedback(element);
       commentPopover.show({ anchor: element, mode: 'new' });
     },
@@ -253,13 +347,12 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     if (!store.state.options.enabled) return;
     if (store.state.active) return;
 
-    // Show toolbar if it was dismissed
     if (store.state.toolbar.visible === false && store.state.options.showToolbar) {
       store.state.toolbar = { ...store.state.toolbar, visible: true };
       toolbar.show();
-      toolbar.update(store.state);
     }
 
+    closeAllPopovers();
     store.state.active = true;
     picker.activate();
     pluginRegistry.callHook('onActivate');
@@ -269,8 +362,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   function doDeactivate(force = false): void {
     if (!store.state.active) return;
 
-    // In hold mode, don't deactivate if the page is frozen — the user
-    // explicitly asked to keep selection mode alive.
+    // Don't deactivate if the page is frozen — the user explicitly asked to
+    // keep selection mode alive.
     if (!force && store.state.frozen) return;
 
     store.state.active = false;
@@ -294,9 +387,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // --- Toolbar ---
   const toolbar = createToolbarRenderer({
     onSelectionMode() {
-      closeAllPopovers();
       if (store.state.active) {
-        doDeactivate();
+        doDeactivate(true);
       } else {
         doActivate();
       }
@@ -304,10 +396,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
     onHistory() {
       commentPopover.hide();
-      if (historyPopover.isVisible()) {
-        historyPopover.hide();
+      copySheet.close();
+      if (commentsPanel.isVisible()) {
+        commentsPanel.hide();
       } else {
-        historyPopover.show([...store.state.toolbar.history]);
+        commentsPanel.show([...comments()]);
       }
     },
 
@@ -316,7 +409,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       const newEnabled = !store.state.options.enabled;
       store.state.options = { ...store.state.options, enabled: newEnabled };
       if (!newEnabled) {
-        doDeactivate();
+        doDeactivate(true);
       }
       toolbar.update(store.state);
     },
@@ -329,67 +422,96 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
   });
 
-  // --- History Popover ---
-  const historyPopover = createHistoryPopover({
-    onEntryHover(entry) {
-      if (!entry) {
-        overlay.hide();
-        return;
-      }
-      const el = safeQuery(entry.context.selector);
-      if (el) {
-        overlay.show(el, entry.context.componentName, null, entry.context.cssClasses);
+  // --- Comments panel ---
+  const commentsPanel = createCommentsPanel({
+    onHover(comment) {
+      const el = comment ? safeQuery(comment.target.selector) : null;
+      if (el && comment) {
+        overlay.show(el, comment.target.component, null, []);
       } else {
         overlay.hide();
       }
     },
 
-    onEntryClick(entry, rowEl) {
-      const el = safeQuery(entry.context.selector);
-      const anchor = el ?? rowEl;
-      historyPopover.hide();
+    onEdit(comment, rowEl) {
+      overlay.hide();
+      const el = safeQuery(comment.target.selector);
+      commentsPanel.hide();
       commentPopover.show({
-        anchor,
-        initialValue: entry.comment ?? '',
+        anchor: el ?? rowEl,
+        initialValue: comment.comment,
         mode: 'edit',
-        entryId: entry.id,
+        entryId: comment.id,
       });
     },
 
+    onDelete(comment) {
+      overlay.hide();
+      removeComments([comment.id], 'Comment deleted');
+    },
+
+    onCopyAll() {
+      overlay.hide();
+      openCopySheet();
+    },
+
     onClearAll() {
-      lastSelectedContext = null;
-      lastSelectedElement = null;
-      grabSessions = [];
-      store.state.toolbar = { ...store.state.toolbar, history: [] };
-      showToast('History cleared');
-      historyPopover.hide();
+      overlay.hide();
+      const n = comments().length;
+      removeComments(comments().map((c) => c.id), `Cleared ${n} comment${n === 1 ? '' : 's'}`);
+      commentsPanel.hide();
     },
   });
 
-  // --- Comment Popover ---
+  // --- Copy sheet ---
+  const copySheet = createCopySheet({
+    async onCopy(text: string, mode: CopyMode): Promise<boolean> {
+      const list = comments();
+      const ok = await writeClipboard(text);
+      if (!ok) return false;
+      pluginRegistry.callHook('onCopySuccess', text, list);
+      const noun = `${list.length} comment${list.length === 1 ? '' : 's'}`;
+      if (mode === 'clear') {
+        removeComments(list.map((c) => c.id), `Copied and cleared ${noun}`);
+      } else {
+        showToast(`Copied ${noun}`);
+      }
+      return true;
+    },
+    onLevelChange(next) {
+      level = next;
+      saveLevel(next);
+    },
+  });
+
+  // --- Comment popover ---
   const commentPopover = createCommentPopover({
-    async onSubmit(value, ctx) {
+    onSubmit(value, ctx) {
       if (ctx.mode === 'new') {
-        if (lastSelectedContext) {
-          await accumulateAndCopy(lastSelectedContext, value);
-        }
-        doDeactivate();
+        const element = selectedElement;
+        const shot = pendingShot;
+        selectedElement = null;
+        pendingShot = null;
+        if (element) saveComment(element, value, shot);
+        doDeactivate(true);
         return;
       }
       if (!ctx.entryId) return;
-      const history = store.state.toolbar.history.map((e) =>
-        e.id === ctx.entryId ? { ...e, comment: value } : e
+      const updated = comments().map((c) =>
+        c.id === ctx.entryId ? { ...c, comment: value, updatedAt: Date.now() } : c,
       );
-      store.state.toolbar = { ...store.state.toolbar, history };
+      setComments(updated);
       showToast('Comment updated');
-      historyPopover.show([...history]);
+      commentsPanel.show([...updated]);
     },
     onCancel(ctx) {
       if (ctx.mode === 'new') {
-        doDeactivate();
+        selectedElement = null;
+        pendingShot = null;
+        doDeactivate(true);
         return;
       }
-      historyPopover.show([...store.state.toolbar.history]);
+      commentsPanel.show([...comments()]);
     },
   });
 
@@ -398,14 +520,14 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     const target = eventTarget(e);
     if (!target) return;
     if (isAnyToolbarElement(target)) return;
-    if (historyPopover.isVisible() || commentPopover.isVisible()) {
+    if (commentsPanel.isVisible() || commentPopover.isVisible() || copySheet.isVisible()) {
       closeAllPopovers();
     }
   }
   document.addEventListener('click', handleDocumentClick);
 
-  // A refresh can land between a grab and its batched write, which would lose
-  // the comment. pagehide covers reload and close; visibilitychange covers the
+  // A refresh can land between a comment and its batched write, which would
+  // lose it. pagehide covers reload and close; visibilitychange covers the
   // mobile case where pagehide isn't guaranteed to run.
   function handlePageHide(): void {
     flushPendingWrite();
@@ -416,7 +538,6 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   window.addEventListener('pagehide', handlePageHide);
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // --- Toast offset helper ---
   function updateToastOffset(): void {
     if (store.state.toolbar.visible) {
       document.documentElement.style.setProperty('--grabby-toast-bottom', TOOLBAR_TOAST_OFFSET);
@@ -429,56 +550,45 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   function handleFreezeKey(e: KeyboardEvent): void {
     if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey) return;
     if (isEditableElement(eventTarget(e))) return;
-
-    // Allow freeze when active, or when toolbar is visible (just deactivated)
-    if (!store.state.active && !store.state.toolbar.visible) return;
-
+    if (!store.state.active) return;
     e.preventDefault();
-
-    // Re-activate if needed (user pressed 'f' right after releasing activation key)
-    if (!store.state.active) {
-      doActivate();
-    }
-
     toggleFreeze();
   }
   document.addEventListener('keydown', handleFreezeKey, true);
 
-  // --- Escape-to-deactivate when no popover is open ---
+  // --- Escape closes the panel, or leaves selection mode ---
   function handleEscapeKey(e: KeyboardEvent): void {
     if (e.key !== 'Escape') return;
-    if (!store.state.active) return;
     if (isEditableElement(eventTarget(e))) return;
-    if (commentPopover.isVisible()) return;
-    if (historyPopover.isVisible()) {
-      historyPopover.hide();
+    if (commentPopover.isVisible() || copySheet.isVisible()) return;
+    if (commentsPanel.isVisible()) {
+      commentsPanel.hide();
       e.preventDefault();
       return;
     }
+    if (!store.state.active) return;
     e.preventDefault();
     doDeactivate(true);
   }
   document.addEventListener('keydown', handleEscapeKey, true);
 
-  // --- Keyboard handler ---
   const keyboard = createKeyboardHandler({
     getActivationKey: () => store.state.options.activationKey,
     getActivationMode: () => store.state.options.activationMode,
     getKeyHoldDuration: () => store.state.options.keyHoldDuration,
     getEnableInInputs: () => store.state.options.enableInInputs,
     onActivate: doActivate,
-    onDeactivate: doDeactivate,
+    onDeactivate: () => doDeactivate(),
     isActive: () => store.state.active,
   });
 
-  // Build the API object so plugins can reference it
   const api: GrabbyAPI = {
     activate: doActivate,
-    deactivate: doDeactivate,
+    deactivate: () => doDeactivate(true),
 
     toggle(): void {
       if (store.state.active) {
-        doDeactivate();
+        doDeactivate(true);
       } else {
         doActivate();
       }
@@ -534,20 +644,27 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       toolbar.update(store.state);
     },
 
-    getHistory(): HistoryEntry[] {
-      return [...store.state.toolbar.history];
+    getComments(): GrabbyComment[] {
+      return [...comments()];
     },
 
-    clearHistory(): void {
-      lastSelectedContext = null;
-      lastSelectedElement = null;
-      grabSessions = [];
-      store.state.toolbar = { ...store.state.toolbar, history: [] };
+    exportComments(opts = {}): string {
+      const ids = opts.ids ? new Set(opts.ids) : null;
+      const list = ids ? comments().filter((c) => ids.has(c.id)) : comments();
+      return exportText(list, opts.level ?? level);
+    },
+
+    deleteComment(id: string): void {
+      removeComments([id], null);
+    },
+
+    clearComments(): void {
+      removeComments(comments().map((c) => c.id), null);
     },
 
     dispose(): void {
       flushPendingWrite();
-      doDeactivate();
+      doDeactivate(true);
       document.removeEventListener('click', handleDocumentClick);
       window.removeEventListener('pagehide', handlePageHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -563,15 +680,16 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       pluginRegistry.dispose();
       closeAllPopovers();
       toolbar.dispose();
-      historyPopover.dispose();
+      commentsPanel.dispose();
       commentPopover.dispose();
+      copySheet.dispose();
       themeManager.dispose();
+      disposeStyleBaseline();
       document.documentElement.style.removeProperty('--grabby-toast-bottom');
       disposeUiRoot();
     },
   };
 
-  // Start listening for keyboard shortcuts
   if (store.state.options.enabled) {
     keyboard.start();
   }
@@ -579,21 +697,20 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // Toolbar starts hidden — it appears when selection mode is first activated
   store.state.toolbar = { ...store.state.toolbar, visible: false };
 
-  // React to enabled option changes
   store.subscribe((state, key) => {
     if (key === 'options') {
       if (state.options.enabled) {
         keyboard.start();
       } else {
         keyboard.stop();
-        doDeactivate();
+        doDeactivate(true);
       }
     }
     if (key === 'toolbar') {
       updateToastOffset();
       if (state.options.persistHistory) {
-        if (state.toolbar.history.length > 0) {
-          saveHistory(state.toolbar.history);
+        if (state.toolbar.comments.length > 0) {
+          saveHistory(state.toolbar.comments);
         } else {
           clearPersistedHistory();
         }

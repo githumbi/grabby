@@ -1,8 +1,20 @@
-export { init, createNoopApi } from './grab';
+export { init, createNoopApi, isDevMode } from './grab';
 export { filterAngularClasses } from './utils';
+export { formatExport, estimateTokens } from './capture/export';
+export { captureTarget } from './capture/capture';
+export { redact } from './capture/redact';
 export type {
   GrabbyOptions,
   GrabbyAPI,
+  GrabbyComment,
+  GrabbyTarget,
+  TargetKind,
+  DetailLevel,
+  CommentAuthor,
+  PageInfo,
+  ScreenshotRef,
+  SourceLocation,
+  StackFrame,
   ElementContext,
   ComponentStackEntry,
   Plugin,
@@ -10,8 +22,6 @@ export type {
   PluginCleanup,
   Theme,
   ThemeMode,
-  HistoryContext,
-  HistoryEntry,
   ToolbarState,
   ComponentResolver,
   SourceResolver,

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPluginRegistry } from '../plugins/plugin-registry';
-import type { Plugin, GrabbyAPI, ElementContext } from '../types';
+import type { Plugin, GrabbyAPI } from '../types';
+import { makeComment } from './fixtures';
 
 function makeMockApi(): GrabbyAPI {
   return {
@@ -16,24 +17,11 @@ function makeMockApi(): GrabbyAPI {
     showToolbar: vi.fn(),
     hideToolbar: vi.fn(),
     setThemeMode: vi.fn(),
-    getHistory: vi.fn(() => []),
-    clearHistory: vi.fn(),
+    getComments: vi.fn(() => []),
+    exportComments: vi.fn(() => ''),
+    deleteComment: vi.fn(),
+    clearComments: vi.fn(),
     dispose: vi.fn(),
-  };
-}
-
-function makeContext(overrides: Partial<ElementContext> = {}): ElementContext {
-  return {
-    element: null as any,
-    html: '<div>test</div>',
-    componentName: null,
-    filePath: null,
-    line: null,
-    column: null,
-    componentStack: [],
-    selector: 'div',
-    cssClasses: [],
-    ...overrides,
   };
 }
 
@@ -147,13 +135,13 @@ describe('createPluginRegistry', () => {
     it('passes arguments to hooks', () => {
       const registry = createPluginRegistry();
       const api = makeMockApi();
-      const onElementSelect = vi.fn();
-      const ctx = makeContext();
+      const onComment = vi.fn();
+      const comment = makeComment();
 
-      registry.register({ name: 'args-test', hooks: { onElementSelect } }, api);
-      registry.callHook('onElementSelect', ctx);
+      registry.register({ name: 'args-test', hooks: { onComment } }, api);
+      registry.callHook('onComment', comment, null);
 
-      expect(onElementSelect).toHaveBeenCalledWith(ctx);
+      expect(onComment).toHaveBeenCalledWith(comment, null);
     });
 
     it('handles plugins with no hooks gracefully', () => {
@@ -203,7 +191,7 @@ describe('createPluginRegistry', () => {
     it('chains transforms across plugins', () => {
       const registry = createPluginRegistry();
       const api = makeMockApi();
-      const ctx = makeContext();
+      const ctx = [makeComment()];
 
       registry.register({
         name: 'upper',
@@ -221,7 +209,7 @@ describe('createPluginRegistry', () => {
     it('returns original text when no plugins have transform', () => {
       const registry = createPluginRegistry();
       const api = makeMockApi();
-      const ctx = makeContext();
+      const ctx = [makeComment()];
 
       registry.register({ name: 'no-transform' }, api);
 
@@ -232,7 +220,7 @@ describe('createPluginRegistry', () => {
     it('catches transform errors and continues', () => {
       const registry = createPluginRegistry();
       const api = makeMockApi();
-      const ctx = makeContext();
+      const ctx = [makeComment()];
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       registry.register({

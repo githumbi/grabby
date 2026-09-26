@@ -1,10 +1,10 @@
-import type { Plugin, PluginHooks, PluginCleanup, ElementContext, GrabbyAPI } from '../types';
+import type { Plugin, PluginHooks, PluginCleanup, GrabbyComment, GrabbyAPI } from '../types';
 
 export interface PluginRegistry {
   register(plugin: Plugin, api: GrabbyAPI): void;
   unregister(name: string): void;
   callHook<K extends keyof PluginHooks>(hookName: K, ...args: Parameters<NonNullable<PluginHooks[K]>>): void;
-  callTransformHook(text: string, context: ElementContext): string;
+  callTransformHook(text: string, comments: GrabbyComment[]): string;
   getPlugins(): ReadonlyArray<Plugin>;
   dispose(): void;
 }
@@ -50,13 +50,13 @@ export function createPluginRegistry(): PluginRegistry {
       }
     },
 
-    callTransformHook(text: string, context: ElementContext): string {
+    callTransformHook(text: string, comments: GrabbyComment[]): string {
       let result = text;
       for (const plugin of plugins.values()) {
         const transform = plugin.hooks?.transformCopyContent;
         if (transform) {
           try {
-            result = transform(result, context);
+            result = transform(result, comments);
           } catch (err) {
             console.warn(`[grabby] Plugin "${plugin.name}" transformCopyContent threw:`, err);
           }

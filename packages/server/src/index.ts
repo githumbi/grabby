@@ -54,6 +54,36 @@ function sanitizeForLog(value: unknown): string {
   return s.replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 200);
 }
 
+/** Flattens a Grabby comment into the fields this server has always stored. */
+function legacyFieldsFromComment(c: Record<string, any>): Record<string, unknown> {
+  const t = (c.target && typeof c.target === 'object' ? c.target : {}) as Record<string, any>;
+  const facts = t.facts && typeof t.facts === 'object'
+    ? Object.entries(t.facts as Record<string, unknown>).map(([k, v]) => `${k}: ${String(v)}`)
+    : [];
+  const author = c.author?.anonymous === false && typeof c.author?.name === 'string' ? `by ${c.author.name}` : '';
+  const snippet = [
+    typeof c.comment === 'string' ? c.comment : '',
+    '',
+    typeof t.preview === 'string' ? t.preview : '',
+    ...facts,
+    typeof c.page?.route === 'string' ? `page: ${c.page.route}` : '',
+    author,
+  ].filter((line, i) => line !== '' || i === 1).join('\n');
+  return {
+    html: typeof t.preview === 'string' ? t.preview : '',
+    componentName: typeof t.component === 'string' ? t.component : (typeof t.tag === 'string' ? `<${t.tag}>` : null),
+    filePath: t.source?.file ?? null,
+    line: t.source?.line ?? null,
+    column: t.source?.column ?? null,
+    selector: typeof t.selector === 'string' ? t.selector : '',
+    cssClasses: [],
+    componentStack: Array.isArray(t.stack)
+      ? t.stack.map((f: Record<string, unknown>) => ({ name: f.name, filePath: f.file ?? null, line: f.line ?? null, column: null }))
+      : [],
+    snippet,
+  };
+}
+
 function truncateString(v: unknown, max: number): string {
   if (typeof v !== 'string') return '';
   return v.length > max ? v.slice(0, max) : v;
@@ -266,6 +296,14 @@ function startWebhookServer(port: number, host: string): void {
           res.end(JSON.stringify({ error: 'Body must be a JSON object' }));
           return;
         }
+
+        // Grabby 0.1 posts one structured comment per request. Until the
+        // collector is rebuilt around that shape, map it onto the legacy
+        // fields so the MCP tools keep returning it, comment included.
+        if (data.type === 'grabby.comment' && data.comment && typeof data.comment === 'object') {
+          Object.assign(data, legacyFieldsFromComment(data.comment));
+        }
+        if (data.componentName == null) data.componentName = '(unknown)';
 
         if (typeof data.html !== 'string' || typeof data.componentName !== 'string') {
           res.writeHead(400, { 'Content-Type': 'application/json' });

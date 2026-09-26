@@ -1,22 +1,22 @@
-import type { HistoryEntry } from '../types';
+import type { GrabbyComment } from '../types';
 
-export const STORAGE_KEY = 'grabby:v1:history';
+export const STORAGE_KEY = 'grabby:v1:comments';
 const SCHEMA_VERSION = 1;
 
 interface PersistedShape {
   v: number;
-  entries: HistoryEntry[];
+  entries: GrabbyComment[];
 }
 
 let pendingRaf: number | null = null;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingEntries: HistoryEntry[] | null = null;
+let pendingEntries: GrabbyComment[] | null = null;
 let quotaWarned = false;
 
 /** How long to wait for a frame that may never arrive before writing anyway. */
 const FLUSH_FALLBACK_MS = 100;
 
-export function loadHistory(): HistoryEntry[] {
+export function loadHistory(): GrabbyComment[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -31,7 +31,7 @@ export function loadHistory(): HistoryEntry[] {
   }
 }
 
-export function saveHistory(entries: HistoryEntry[]): void {
+export function saveHistory(entries: GrabbyComment[]): void {
   pendingEntries = entries;
   if (pendingRaf != null || pendingTimer != null) return;
   pendingRaf = requestAnimationFrame(flushPendingWrite);
@@ -55,7 +55,7 @@ export function flushPendingWrite(): void {
   writeWithQuotaFallback(entries);
 }
 
-function writeWithQuotaFallback(entries: HistoryEntry[]): void {
+function writeWithQuotaFallback(entries: GrabbyComment[]): void {
   const payload: PersistedShape = { v: SCHEMA_VERSION, entries };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -83,7 +83,7 @@ function warnQuotaOnce(): void {
   if (quotaWarned) return;
   quotaWarned = true;
   // eslint-disable-next-line no-console
-  console.warn('[grabby] history localStorage write failed (quota or other error).');
+  console.warn('[grabby] saving comments to localStorage failed (quota or other error).');
 }
 
 export function clearPersistedHistory(): void {

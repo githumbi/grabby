@@ -2,6 +2,8 @@ import type { OverlayRenderer } from '../overlay/overlay-renderer';
 import type { Crosshair } from '../overlay/crosshair';
 import type { ComponentResolver, SourceResolver } from '../types';
 import { filterAngularClasses } from '../utils';
+import { promoteTarget } from '../capture/kind';
+import { IGNORE_ATTR } from '../capture/preview';
 
 export interface ElementPicker {
   activate(): void;
@@ -47,7 +49,7 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     return path;
   }
 
-  function elementAtPoint(x: number, y: number): Element | null {
+  function rawElementAtPoint(x: number, y: number): Element | null {
     // Temporarily hide freeze overlay so elementFromPoint can see through it
     const freezeEl = deps.getFreezeElement?.();
     if (freezeEl) freezeEl.style.pointerEvents = 'none';
@@ -56,8 +58,19 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     return target;
   }
 
+  /**
+   * The element a click means. Icons and labels inside a button resolve to
+   * the button (hold Shift to pick the exact inner element), and anything
+   * marked data-grabby-ignore can't be picked at all.
+   */
+  function elementAtPoint(x: number, y: number, exact: boolean): Element | null {
+    const raw = rawElementAtPoint(x, y);
+    if (!raw || raw.closest(`[${IGNORE_ATTR}]`)) return raw && deps.isToolbarElement?.(raw) ? raw : null;
+    return exact ? raw : promoteTarget(raw);
+  }
+
   function handleMouseMove(e: MouseEvent): void {
-    const target = elementAtPoint(e.clientX, e.clientY);
+    const target = elementAtPoint(e.clientX, e.clientY, e.shiftKey);
     if (!target || deps.overlay.isOverlayElement(target)) return;
     if (deps.crosshair.isCrosshairElement(target)) return;
     if (deps.isToolbarElement?.(target)) return;
@@ -72,7 +85,7 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
   }
 
   function handleClick(e: MouseEvent): void {
-    const target = elementAtPoint(e.clientX, e.clientY);
+    const target = rawElementAtPoint(e.clientX, e.clientY);
     if (target && (deps.isToolbarElement?.(target) || deps.crosshair.isCrosshairElement(target))) return;
 
     e.preventDefault();

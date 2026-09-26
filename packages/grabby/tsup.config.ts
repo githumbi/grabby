@@ -18,6 +18,9 @@ export default defineConfig([
     outDir: 'dist',
     clean: false,
     minify: true,
+    // A script tag can't resolve bare imports, so the screenshot renderer
+    // is bundled in (it's still only executed on first use).
+    noExternal: ['modern-screenshot'],
   },
   // 3. Angular: ESM + types
   {

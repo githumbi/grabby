@@ -97,7 +97,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', 'Comment');
     textarea = document.createElement('textarea');
-    textarea.placeholder = 'Add a comment...';
+    textarea.placeholder = 'What should change here?';
     textarea.rows = 3;
     const hint = document.createElement('span');
     hint.className = 'grabby-cp-hint';

@@ -1,25 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { loadHistory, saveHistory, clearPersistedHistory, STORAGE_KEY, flushPendingWrite } from '../storage/history-persistence';
-import type { HistoryEntry } from '../types';
+import type { GrabbyComment } from '../types';
+import { makeComment } from './fixtures';
 
-function makeEntry(id: string, comment?: string): HistoryEntry {
-  return {
-    id,
-    context: {
-      html: `<div id="${id}">x</div>`,
-      componentName: 'C',
-      filePath: null,
-      line: null,
-      column: null,
-      componentStack: [],
-      selector: `#${id}`,
-      cssClasses: [],
-    },
-    snippet: `snippet-${id}`,
-    timestamp: 1_700_000_000_000,
-    comment,
-  };
+function makeEntry(id: string, comment?: string): GrabbyComment {
+  return makeComment({ id, comment: comment ?? '', createdAt: 1_700_000_000_000 });
 }
 
 describe('history-persistence', () => {
