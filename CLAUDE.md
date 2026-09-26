@@ -39,19 +39,20 @@ pnpm --dir examples/react-vite dev        # try it in an app
 
 ## State (2026-09-26)
 
-All five milestones are built, tested (203 tests) and committed on stacked branches; `grabby-m5` is pushed with a PR into `main`:
-`grabby-m1` rename + security → `grabby-m2` capture + Copy & clear → `grabby-m3` adapters + plugin → `grabby-m4` live mode + server → `grabby-m5` packaging, CI, docs, plus two fixes found on the Mobigrow portal (short hover label; real component names in production React builds). `grabby-m5` contains everything; `main` and `react-support` are still at the old angular-grab code (`2c7a9f7`).
+All five milestones plus the follow-ups are merged into `main` (PR #1, merge commit `445c73a`, 203 tests): the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector, packaging, CI and docs, the CodeQL fixes, and live-mode **Finish review**. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`).
 
-Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; strict CSP + Trusted Types with zero violations; a packed tarball installed into a fresh Vite app.
+**Published on npm** (2026-09-26): `@githumbi/grabby` 0.1.0 and `@githumbi/grabby-server` 0.1.0, under the npm org `githumbi` (owned by npm user `thumbi74`). Both have GitHub Actions trusted publishing set up for `release.yml`.
 
-**Mobigrow portal** (`~/Documents/KCB work/Mobigrow/prototype`, repo `githumbi/mobigrow-portal`) uses Grabby via a vendored tarball (`vendor/githumbi-grabby-0.1.0-80950f4.tgz`, i.e. without the production component-name fix). **Don't change the Mobigrow project unless the user asks**; they reverted the last update there.
+**`main` is protected**: changes go through a PR; `test (20/22/24)`, `audit` and `analyze` must pass, the branch must be up to date and conversations resolved; admins included; no force-push or deletion.
+
+Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; Finish review with the collector going down and coming back; strict CSP + Trusted Types with zero violations; a packed tarball installed into a fresh Vite app.
+
+**Mobigrow portal** (`~/Documents/KCB work/Mobigrow/prototype`, repo `githumbi/mobigrow-portal`) uses Grabby via a vendored tarball (`vendor/githumbi-grabby-0.1.0-80950f4.tgz`, i.e. without the production component-name fix). It could now switch to `@githumbi/grabby` from npm. **Don't change the Mobigrow project unless the user asks**; they reverted the last update there.
 
 ## Next steps
 
-1. ~~Rename the repo to `githumbi/grabby`~~ (done 2026-09-26; `origin` updated).
-2. Review and merge the PR from `grabby-m5` into `main` (it contains m1–m4). CI (`.github/workflows/ci.yml`) runs on it.
-3. Repo settings: enable private vulnerability reporting (SECURITY.md relies on it); optionally protect `main`.
-4. First npm publish of `@githumbi/grabby` and `@githumbi/grabby-server` 0.1.0, by hand with 2FA (`pnpm build`, then `pnpm publish --access public` in each package), because npm trusted publishing can only be configured on a package that already exists. Then on npmjs.com add GitHub Actions trusted publishing (repo `githumbi/grabby`, workflow `release.yml`) for both, and later releases go through Changesets.
-5. Optional: rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`, which points at `angular-grab/...`).
+1. Releases: add a changeset (`pnpm changeset`) in each PR that changes a published package. Merging to `main` makes `release.yml` open a "Version packages" PR; merging that publishes to npm with provenance.
+2. Repo settings: enable private vulnerability reporting (SECURITY.md relies on it; it's off). One medium CodeQL alert is open by design (`js/http-to-file-access`, `cli.ts` `--out`); dismiss as won't fix.
+3. Optional: delete the merged `grabby-m1`…`grabby-m5` and `react-support` branches; rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`, which points at `angular-grab/...`).
 
 Backlog: a reviewer deleting an already-sent comment doesn't delete it on the collector; Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.
