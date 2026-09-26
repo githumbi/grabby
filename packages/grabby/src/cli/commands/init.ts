@@ -197,6 +197,6 @@ export async function init(options: InitOptions = {}): Promise<void> {
   } else {
     console.log(`\n  Start your dev server, press ${c.bold('Alt+G')} (${c.bold('Option+G')} on Mac), click anything, and comment.`);
     console.log(`  Then use ${c.bold('Copy all')} and paste into your AI agent.`);
-    console.log(`  Want your agent to read comments directly? Run ${c.bold('npx grabby add mcp')}.\n`);
+    console.log(`  Want your agent to read comments directly? Run ${c.bold('npx @githumbi/grabby add mcp')}.\n`);
   }
 }

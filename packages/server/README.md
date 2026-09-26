@@ -18,7 +18,7 @@ Run `--help` for all options.
 
 ## Local development
 
-`npx grabby add mcp` in your project writes an `.mcp.json` entry that runs `grabby-server mcp`. That one process is both the MCP server and a collector on `http://localhost:3456`. Point Grabby at it:
+`npx @githumbi/grabby add mcp` in your project writes an `.mcp.json` entry that runs `grabby-server mcp`. That one process is both the MCP server and a collector on `http://localhost:3456`. Point Grabby at it:
 
 ```ts
 initGrabby({ server: 'http://localhost:3456' });
