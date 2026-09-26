@@ -23,6 +23,11 @@ updates:
       # Example apps track their framework's current major deliberately.
       - dependency-name: '@angular/*'
         update-types: ['version-update:semver-major']
+      # Angular's devkit packages are versioned 0.MMmm.p (0.2102.x is
+      # Angular 21.2), so a new Angular major shows up as a *minor* update.
+      # They must move together with @angular/build, not on their own.
+      - dependency-name: '@angular-devkit/*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
 
   # Actions are pinned to commit SHAs; Dependabot updates the SHA and the
   # version comment together.
