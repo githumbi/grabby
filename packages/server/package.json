@@ -25,14 +25,14 @@
     "prebuild": "node -e \"const fs=require('fs');fs.copyFileSync('../../LICENSE','LICENSE')\""
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "zod": "^3.23"
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "tsup": "^8.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^2",
-    "@githumbi/grabby": "workspace:^"
+    "@githumbi/grabby": "workspace:^",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   },
   "repository": {
     "type": "git",
