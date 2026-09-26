@@ -1,4 +1,5 @@
 import { Z_INDEX_OVERLAY, Z_INDEX_LABEL } from '../constants';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 
 const OVERLAY_ID = '__grabby-overlay__';
 const LABEL_ID = '__grabby-label__';
@@ -21,11 +22,9 @@ export function createOverlayRenderer(): OverlayRenderer {
   let currentCssClasses: string[] = [];
 
   function injectStyles(): void {
-    if (document.getElementById(STYLE_ID)) return;
+    if (hasStyles(STYLE_ID)) return;
 
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+    addStyles(STYLE_ID, `
       #${OVERLAY_ID} {
         position: fixed;
         pointer-events: none;
@@ -50,8 +49,7 @@ export function createOverlayRenderer(): OverlayRenderer {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-    `;
-    document.head.appendChild(style);
+    `);
   }
 
   function ensureElements(): void {
@@ -59,12 +57,12 @@ export function createOverlayRenderer(): OverlayRenderer {
       injectStyles();
       overlay = document.createElement('div');
       overlay.id = OVERLAY_ID;
-      document.body.appendChild(overlay);
+      getUiRoot().appendChild(overlay);
     }
     if (!label) {
       label = document.createElement('div');
       label.id = LABEL_ID;
-      document.body.appendChild(label);
+      getUiRoot().appendChild(label);
     }
   }
 
@@ -169,7 +167,7 @@ export function createOverlayRenderer(): OverlayRenderer {
 
       overlay?.remove();
       label?.remove();
-      document.getElementById(STYLE_ID)?.remove();
+      removeStyles(STYLE_ID);
       overlay = null;
       label = null;
     },

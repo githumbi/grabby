@@ -1,13 +1,14 @@
 import { Z_INDEX_OVERLAY, Z_INDEX_LABEL } from '../constants';
+import { svgIcon } from '../ui/dom';
+import { ICON_CHECK_SMALL } from '../toolbar/toolbar-icons';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 
 const STYLE_ID = '__grabby-feedback-styles__';
 
 function injectStyles(): void {
-  if (document.getElementById(STYLE_ID)) return;
+  if (hasStyles(STYLE_ID)) return;
 
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
-  style.textContent = `
+  addStyles(STYLE_ID, `
     @keyframes grabby-flash {
       0%   { opacity: 1; }
       100% { opacity: 0; transform: scale(1.02); }
@@ -51,13 +52,10 @@ function injectStyles(): void {
       height: 10px;
       flex-shrink: 0;
     }
-  `;
-  document.head.appendChild(style);
+  `);
 }
 
-const CHECK_SVG = `<svg viewBox="0 0 10 10" fill="none"><path d="M2 5.5l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-export function showSelectFeedback(element: Element): void {
+export function showSelectFeedback(element: Element, label = 'Selected'): void {
   injectStyles();
 
   const rect = element.getBoundingClientRect();
@@ -69,13 +67,13 @@ export function showSelectFeedback(element: Element): void {
   flash.style.left = `${rect.left}px`;
   flash.style.width = `${rect.width}px`;
   flash.style.height = `${rect.height}px`;
-  document.body.appendChild(flash);
+  getUiRoot().appendChild(flash);
 
-  // "Copied" pill above the element
+  // Confirmation pill above the element
   const pill = document.createElement('div');
   pill.className = 'grabby-select-pill';
-  pill.innerHTML = `${CHECK_SVG} Copied`;
-  document.body.appendChild(pill);
+  pill.append(svgIcon(ICON_CHECK_SMALL), ` ${label}`);
+  getUiRoot().appendChild(pill);
 
   // Position pill centered above the element (or below if no room)
   const pillWidth = 70; // approximate
@@ -104,5 +102,5 @@ export function showSelectFeedback(element: Element): void {
 }
 
 export function disposeFeedbackStyles(): void {
-  document.getElementById(STYLE_ID)?.remove();
+  removeStyles(STYLE_ID);
 }

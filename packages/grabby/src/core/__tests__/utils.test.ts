@@ -1,37 +1,51 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
-import { escapeHtml, cleanAngularAttrs } from '../utils';
+import { describe, it, expect, afterEach } from 'vitest';
+import { cleanAngularAttrs, cssEscape, safeQuery, buildUniqueSelector } from '../utils';
 
-describe('escapeHtml', () => {
-  it('escapes ampersands', () => {
-    expect(escapeHtml('foo & bar')).toBe('foo &amp; bar');
+describe('cssEscape', () => {
+  it('escapes Tailwind-style class characters', () => {
+    expect(cssEscape('md:flex')).toBe('md\\:flex');
+    expect(cssEscape('w-1/2')).toBe('w-1\\/2');
   });
 
-  it('escapes angle brackets', () => {
-    expect(escapeHtml('<div>')).toBe('&lt;div&gt;');
+  it('escapes a leading digit', () => {
+    expect(cssEscape('1abc')).toBe('\\31 abc');
+  });
+});
+
+describe('safeQuery', () => {
+  it('returns null for a selector that would throw', () => {
+    expect(safeQuery('div.md:flex')).toBeNull();
   });
 
-  it('passes through double quotes (not special in text nodes)', () => {
-    // innerHTML only escapes <, >, & in text content — not quotes
-    expect(escapeHtml('"hello"')).toBe('"hello"');
+  it('returns null for empty input', () => {
+    expect(safeQuery('')).toBeNull();
+    expect(safeQuery(null)).toBeNull();
+  });
+});
+
+describe('buildUniqueSelector', () => {
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('prefers a test id', () => {
+    document.body.innerHTML = '<div><button data-testid="save" id="x">Save</button></div>';
+    const el = document.querySelector('button')!;
+    expect(buildUniqueSelector(el)).toBe('[data-testid="save"]');
   });
 
-  it('passes through single quotes (not special in text nodes)', () => {
-    expect(escapeHtml("it's")).toBe("it's");
+  it('uses an escaped id when there is no test id', () => {
+    document.body.innerHTML = '<div id="1st:item"></div>';
+    const el = document.body.firstElementChild!;
+    const sel = buildUniqueSelector(el);
+    expect(document.querySelector(sel)).toBe(el);
   });
 
-  it('escapes multiple special characters together', () => {
-    expect(escapeHtml('<a href="x">&</a>')).toBe(
-      '&lt;a href="x"&gt;&amp;&lt;/a&gt;',
-    );
-  });
-
-  it('returns empty string for empty input', () => {
-    expect(escapeHtml('')).toBe('');
-  });
-
-  it('returns plain text unchanged', () => {
-    expect(escapeHtml('hello world')).toBe('hello world');
+  it('builds a unique path for elements with Tailwind classes and no id', () => {
+    document.body.innerHTML = '<ul><li class="md:flex">a</li><li class="md:flex w-1/2">b</li></ul>';
+    const el = document.querySelectorAll('li')[1];
+    const sel = buildUniqueSelector(el);
+    expect(document.querySelectorAll(sel)).toHaveLength(1);
+    expect(document.querySelector(sel)).toBe(el);
   });
 });
 

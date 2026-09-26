@@ -1,3 +1,5 @@
+import { eventTarget, isEditableElement } from '../ui/root';
+
 export interface ParsedKey {
   key: string;
   meta: boolean;
@@ -61,19 +63,25 @@ export function parseKeyCombo(combo: string): ParsedKey {
   return result;
 }
 
+/**
+ * Compares the physical key as well as the produced character: on macOS,
+ * Option+G reports e.key as "©", so e.code is the only reliable signal there.
+ */
+export function keyMatches(e: KeyboardEvent, key: string): boolean {
+  if (e.key && e.key.toLowerCase() === key) return true;
+  if (!e.code) return false;
+  if (/^[a-z]$/.test(key)) return e.code === `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return e.code === `Digit${key}`;
+  return false;
+}
+
 function matchesCombo(e: KeyboardEvent, parsed: ParsedKey): boolean {
   if (parsed.meta && !e.metaKey) return false;
   if (parsed.ctrl && !e.ctrlKey) return false;
   if (parsed.shift && !e.shiftKey) return false;
   if (parsed.alt && !e.altKey) return false;
 
-  return e.key.toLowerCase() === parsed.key;
-}
-
-function isInputElement(el: EventTarget | null): boolean {
-  if (!el || !(el instanceof HTMLElement)) return false;
-  const tag = el.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+  return keyMatches(e, parsed.key);
 }
 
 export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandler {
@@ -82,7 +90,7 @@ export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandle
   let listening = false;
 
   function handleKeyDown(e: KeyboardEvent): void {
-    if (!deps.getEnableInInputs() && isInputElement(e.target)) return;
+    if (!deps.getEnableInInputs() && isEditableElement(eventTarget(e))) return;
 
     const parsed = parseKeyCombo(deps.getActivationKey());
     if (!matchesCombo(e, parsed)) return;
@@ -115,7 +123,7 @@ export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandle
     const parsed = parseKeyCombo(deps.getActivationKey());
 
     // For key-up we check if the released key matches the main key
-    if (e.key.toLowerCase() !== parsed.key) return;
+    if (!keyMatches(e, parsed.key)) return;
 
     const mode = deps.getActivationMode();
 

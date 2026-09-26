@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { queryUi, getUiRoot, deepActiveElement, disposeUiRoot } from '../ui/root';
 import { init } from '../grab';
 import { STORAGE_KEY } from '../storage/history-persistence';
 import type { GrabbyAPI } from '../types';
@@ -31,13 +32,13 @@ describe('grab with a failing clipboard', () => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await Promise.resolve();
 
-    const textarea = document.querySelector('textarea');
+    const textarea = queryUi<HTMLTextAreaElement>('textarea');
     if (!textarea) throw new Error('comment popover did not open');
     textarea.value = comment;
     textarea.focus(); // the popover only accepts Enter while the textarea has focus
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, composed: true }),
     );
     await new Promise((r) => setTimeout(r, 0));
   }
@@ -50,6 +51,7 @@ describe('grab with a failing clipboard', () => {
   afterEach(() => {
     api?.dispose();
     document.body.innerHTML = '';
+    disposeUiRoot();
     localStorage.clear();
   });
 
@@ -96,7 +98,7 @@ describe('grab with a failing clipboard', () => {
     await grabWithComment(document.getElementById('target')!, 'tell me');
 
     expect(onCopyError).toHaveBeenCalledTimes(1);
-    expect(document.body.textContent).toContain('clipboard blocked');
+    expect(getUiRoot().textContent).toContain('clipboard blocked');
   });
 
   it('does not claim a copy that never happened', async () => {
@@ -122,6 +124,6 @@ describe('grab with a failing clipboard', () => {
     expect(api.getHistory().map((e) => e.comment)).toEqual(['happy path']);
     expect(onGrab).toHaveBeenCalledTimes(1);
     expect(onCopySuccess).toHaveBeenCalledTimes(1);
-    expect(document.body.textContent).toContain('Copied with comment');
+    expect(getUiRoot().textContent).toContain('Copied with comment');
   });
 });

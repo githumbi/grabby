@@ -1,5 +1,7 @@
-import { escapeHtml } from '../utils';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 import { Z_INDEX_TOAST } from '../constants';
+import { h, svgIcon } from '../ui/dom';
+import { ICON_CHECK_CIRCLE } from '../toolbar/toolbar-icons';
 
 const TOAST_ID = '__grabby-toast__';
 const TOAST_STYLE_ID = '__grabby-toast-styles__';
@@ -16,11 +18,9 @@ export interface ToastDetail {
 }
 
 function injectToastStyles(): void {
-  if (document.getElementById(TOAST_STYLE_ID)) return;
+  if (hasStyles(TOAST_STYLE_ID)) return;
 
-  const style = document.createElement('style');
-  style.id = TOAST_STYLE_ID;
-  style.textContent = `
+  addStyles(TOAST_STYLE_ID, `
     #${TOAST_ID} {
       position: fixed;
       bottom: var(--grabby-toast-bottom, 24px);
@@ -96,57 +96,61 @@ function injectToastStyles(): void {
       text-decoration: underline;
       color: var(--grabby-accent, #2563eb);
     }
-  `;
-  document.head.appendChild(style);
+  `);
 }
+
+let toastEl: HTMLDivElement | null = null;
 
 function getOrCreateToast(): HTMLDivElement {
-  let toast = document.getElementById(TOAST_ID) as HTMLDivElement | null;
-  if (!toast) {
-    injectToastStyles();
-    toast = document.createElement('div');
-    toast.id = TOAST_ID;
-    document.body.appendChild(toast);
-  }
-  return toast;
+  if (toastEl?.isConnected) return toastEl;
+  injectToastStyles();
+  toastEl = h('div', { id: TOAST_ID, role: 'status', 'aria-live': 'polite' });
+  getUiRoot().appendChild(toastEl);
+  return toastEl;
 }
 
-const CHECKMARK_SVG = `<svg class="grabby-toast-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" fill="#22c55e"/><path d="M5 8l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function vsCodeUri(filePath: string, line: number | null, column: number | null): string {
+  let uri = `vscode://file/${encodeURI(filePath)}`;
+  if (line != null) uri += `:${line}`;
+  if (line != null && column != null) uri += `:${column}`;
+  return uri;
+}
+
+function row(label: string, value: Node | string): HTMLDivElement {
+  return h('div', { class: 'grabby-toast-row' },
+    h('span', { class: 'grabby-toast-label' }, label),
+    typeof value === 'string' ? h('span', { class: 'grabby-toast-value' }, value) : value,
+  );
+}
 
 export function showToast(message: string, detail?: ToastDetail, durationMs = 3500): void {
   const toast = getOrCreateToast();
 
-  let html = `<div class="grabby-toast-header">${CHECKMARK_SVG}<span class="grabby-toast-title">${escapeHtml(message)}</span></div>`;
+  const children: Node[] = [
+    h('div', { class: 'grabby-toast-header' },
+      svgIcon(ICON_CHECK_CIRCLE, 'grabby-toast-icon'),
+      h('span', { class: 'grabby-toast-title' }, message),
+    ),
+  ];
 
   if (detail) {
-    html += '<div class="grabby-toast-details">';
-
-    if (detail.componentName) {
-      html += `<div class="grabby-toast-row"><span class="grabby-toast-label">Component</span><span class="grabby-toast-value">${escapeHtml(detail.componentName)}</span></div>`;
-    }
-
+    const details = h('div', { class: 'grabby-toast-details' });
+    if (detail.componentName) details.appendChild(row('Component', detail.componentName));
     if (detail.filePath) {
-      let loc = detail.filePath;
-      if (detail.line != null) loc += `:${detail.line}`;
-
-      let vsCodeUri = `vscode://file/${encodeURI(detail.filePath)}`;
-      if (detail.line != null) vsCodeUri += `:${detail.line}`;
-      if (detail.line != null && detail.column != null) vsCodeUri += `:${detail.column}`;
-
-      html += `<div class="grabby-toast-row"><span class="grabby-toast-label">File</span>`;
-      html += `<a class="grabby-toast-file-link" href="${escapeHtml(vsCodeUri)}" title="Open in VS Code">${escapeHtml(loc)}</a>`;
-      html += `</div>`;
+      const loc = detail.line != null ? `${detail.filePath}:${detail.line}` : detail.filePath;
+      details.appendChild(row('File', h('a', {
+        class: 'grabby-toast-file-link',
+        href: vsCodeUri(detail.filePath, detail.line, detail.column),
+        title: 'Open in VS Code',
+      }, loc)));
     }
-
     if (detail.cssClasses && detail.cssClasses.length > 0) {
-      const classes = detail.cssClasses.map((c) => `.${escapeHtml(c)}`).join(' ');
-      html += `<div class="grabby-toast-row"><span class="grabby-toast-label">Classes</span><span class="grabby-toast-value">${classes}</span></div>`;
+      details.appendChild(row('Classes', detail.cssClasses.map((c) => `.${c}`).join(' ')));
     }
-
-    html += '</div>';
+    children.push(details);
   }
 
-  toast.innerHTML = html;
+  toast.replaceChildren(...children);
 
   if (activeTimer) {
     clearTimeout(activeTimer);
@@ -170,6 +174,7 @@ export function disposeToast(): void {
     clearTimeout(activeTimer);
     activeTimer = null;
   }
-  document.getElementById(TOAST_ID)?.remove();
-  document.getElementById(TOAST_STYLE_ID)?.remove();
+  toastEl?.remove();
+  toastEl = null;
+  removeStyles(TOAST_STYLE_ID);
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { queryUi, getUiRoot, deepActiveElement, disposeUiRoot } from '../ui/root';
 import { createCommentPopover } from '../toolbar/comment-popover';
 import { saveHistory, flushPendingWrite, STORAGE_KEY } from '../storage/history-persistence';
 import type { HistoryEntry } from '../types';
@@ -27,6 +28,7 @@ describe('when no animation frame ever fires', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
     document.body.innerHTML = '';
+    disposeUiRoot();
     localStorage.clear();
   });
 
@@ -70,7 +72,7 @@ describe('when no animation frame ever fires', () => {
 
     popover.show({ anchor, mode: 'new' });
 
-    expect(document.activeElement).toBe(document.querySelector('textarea'));
+    expect(deepActiveElement()).toBe(queryUi('textarea'));
     popover.dispose();
   });
 
@@ -81,12 +83,12 @@ describe('when no animation frame ever fires', () => {
     document.body.appendChild(anchor);
 
     popover.show({ anchor, mode: 'new' });
-    const ta = document.querySelector('textarea')!;
+    const ta = queryUi('textarea')!;
     ta.value = 'typed anyway';
     ta.blur();
     (document.body as HTMLElement).focus();
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0]).toBe('typed anyway');
@@ -101,10 +103,10 @@ describe('when no animation frame ever fires', () => {
     document.body.append(anchor, other);
 
     popover.show({ anchor, mode: 'new' });
-    document.querySelector('textarea')!.value = 'not mine';
+    queryUi('textarea')!.value = 'not mine';
     other.focus();
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     popover.dispose();

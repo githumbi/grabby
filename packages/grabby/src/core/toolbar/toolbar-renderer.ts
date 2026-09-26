@@ -1,6 +1,8 @@
 import type { GrabState } from '../store';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 import { Z_INDEX_TOOLBAR } from '../constants';
 import { ICON_GRAB, ICON_HISTORY, ICON_POWER, ICON_DISMISS } from './toolbar-icons';
+import { svgIcon, type IconSpec } from '../ui/dom';
 
 const TOOLBAR_ID = '__grabby-toolbar__';
 const STYLE_ID = '__grabby-toolbar-styles__';
@@ -27,11 +29,9 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
   let allElements = new Set<Element>();
 
   function injectStyles(): void {
-    if (document.getElementById(STYLE_ID)) return;
+    if (hasStyles(STYLE_ID)) return;
 
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+    addStyles(STYLE_ID, `
       #${TOOLBAR_ID} {
         position: fixed;
         bottom: 20px;
@@ -101,13 +101,13 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
         opacity: 0;
         pointer-events: none;
       }
-    `;
-    document.head.appendChild(style);
+    `);
   }
 
-  function createButton(name: string, icon: string, title: string, onClick: () => void): HTMLButtonElement {
+  function createButton(name: string, icon: IconSpec, title: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.innerHTML = icon;
+    btn.type = 'button';
+    btn.appendChild(svgIcon(icon));
     btn.title = title;
     btn.setAttribute('aria-label', title);
     btn.setAttribute('data-grabby-btn', name);
@@ -147,7 +147,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
     container.appendChild(buttons.enable);
     container.appendChild(buttons.dismiss);
 
-    document.body.appendChild(container);
+    getUiRoot().appendChild(container);
 
     // Track all elements for isToolbarElement checks
     allElements.clear();
@@ -204,7 +204,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
 
     dispose(): void {
       container?.remove();
-      document.getElementById(STYLE_ID)?.remove();
+      removeStyles(STYLE_ID);
       container = null;
       leftGroup = null;
       buttons = {};

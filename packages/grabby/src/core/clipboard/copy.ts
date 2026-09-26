@@ -2,22 +2,13 @@ import type { ElementContext, ComponentStackEntry, ComponentResolver, SourceReso
 import type { PluginRegistry } from '../plugins/plugin-registry';
 import { generateSnippet } from './generate-snippet';
 import { showToast, type ToastDetail } from '../overlay/toast';
-import { filterAngularClasses } from '../utils';
+import { filterAngularClasses, buildUniqueSelector } from '../utils';
 
 export interface CopyDeps {
   getComponentResolver: () => ComponentResolver | null;
   getSourceResolver: () => SourceResolver | null;
   getMaxContextLines: () => number;
   pluginRegistry: PluginRegistry;
-}
-
-function buildSelector(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  const id = el.id ? `#${el.id}` : '';
-  const classes = filterAngularClasses(el.classList)
-    .map((c) => `.${c}`)
-    .join('');
-  return `${tag}${id}${classes}`;
 }
 
 function getCssClasses(el: Element): string[] {
@@ -61,7 +52,7 @@ export function buildElementContext(
     line: srcResult?.line ?? null,
     column: srcResult?.column ?? null,
     componentStack,
-    selector: buildSelector(element),
+    selector: buildUniqueSelector(element),
     cssClasses: getCssClasses(element),
   };
 }

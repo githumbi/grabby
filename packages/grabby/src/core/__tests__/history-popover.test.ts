@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { queryUi, getUiRoot, deepActiveElement, disposeUiRoot } from '../ui/root';
 import { createHistoryPopover } from '../toolbar/history-popover';
 import type { HistoryEntry } from '../types';
 
@@ -31,6 +32,7 @@ describe('HistoryPopover', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     document.head.innerHTML = '';
+    disposeUiRoot();
     onEntryClick = vi.fn();
     onEntryHover = vi.fn();
     onClearAll = vi.fn();
@@ -49,7 +51,7 @@ describe('HistoryPopover', () => {
     const entries = [makeEntry('a', '#here'), makeEntry('b', '#nope')];
     popover.show(entries);
 
-    const rows = document.querySelectorAll('.grabby-history-item');
+    const rows = getUiRoot().querySelectorAll('.grabby-history-item');
     expect(rows.length).toBe(2);
     expect(rows[0].classList.contains('grabby-history-item-missing')).toBe(false);
     expect(rows[1].classList.contains('grabby-history-item-missing')).toBe(true);
@@ -58,7 +60,7 @@ describe('HistoryPopover', () => {
   it('fires onEntryHover with entry on mouseenter and null on mouseleave', () => {
     const entries = [makeEntry('a', 'body')];
     popover.show(entries);
-    const row = document.querySelector('.grabby-history-item') as HTMLElement;
+    const row = queryUi('.grabby-history-item') as HTMLElement;
     row.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
     expect(onEntryHover).toHaveBeenCalledWith(entries[0]);
     row.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
@@ -68,14 +70,14 @@ describe('HistoryPopover', () => {
   it('fires onEntryClick with entry and rowEl on click', () => {
     const entries = [makeEntry('a', 'body')];
     popover.show(entries);
-    const row = document.querySelector('.grabby-history-item') as HTMLElement;
+    const row = queryUi('.grabby-history-item') as HTMLElement;
     row.click();
     expect(onEntryClick).toHaveBeenCalledWith(entries[0], row);
   });
 
   it('renders Clear all button and fires onClearAll when clicked', () => {
     popover.show([makeEntry('a', 'body')]);
-    const clearBtn = document.querySelector('[data-grabby-clear-all]') as HTMLButtonElement;
+    const clearBtn = queryUi('[data-grabby-clear-all]') as HTMLButtonElement;
     expect(clearBtn).toBeTruthy();
     clearBtn.click();
     expect(onClearAll).toHaveBeenCalled();
@@ -83,7 +85,7 @@ describe('HistoryPopover', () => {
 
   it('does not render action buttons when entries empty', () => {
     popover.show([]);
-    expect(document.querySelector('[data-grabby-clear-all]')).toBeNull();
-    expect(document.querySelector('[data-grabby-copy-all]')).toBeNull();
+    expect(queryUi('[data-grabby-clear-all]')).toBeNull();
+    expect(queryUi('[data-grabby-copy-all]')).toBeNull();
   });
 });

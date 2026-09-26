@@ -1,10 +1,12 @@
 import type { ThemeMode, Theme } from '../types';
+import { addStyles, removeStyles } from '../ui/root';
 
-const STYLE_ID = '__grabby-theme-vars__';
-const OVERRIDE_STYLE_ID = '__grabby-theme-overrides__';
+const STYLE_ID = 'theme-vars';
+const OVERRIDE_STYLE_ID = 'theme-overrides';
 
 const LIGHT_VARS = `
-  :root {
+  :host {
+    all: initial;
     --grabby-bg: #ffffff;
     --grabby-text: #334155;
     --grabby-text-muted: #94a3b8;
@@ -58,51 +60,30 @@ export interface ThemeManager {
   dispose(): void;
 }
 
+/** Colours only: anything that could close the rule or pull in a URL is dropped. */
+const SAFE_CSS_VALUE = /^[#a-zA-Z0-9\s(),.%-]+$/;
+
 export function createThemeManager(): ThemeManager {
-  let styleEl: HTMLStyleElement | null = null;
-  let overrideEl: HTMLStyleElement | null = null;
-
-  function getOrCreateStyle(): HTMLStyleElement {
-    if (styleEl) return styleEl;
-    const existing = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
-    if (existing) { styleEl = existing; return styleEl; }
-    styleEl = document.createElement('style');
-    styleEl.id = STYLE_ID;
-    document.head.appendChild(styleEl);
-    return styleEl;
-  }
-
-  function getOrCreateOverrideStyle(): HTMLStyleElement {
-    if (overrideEl) return overrideEl;
-    overrideEl = document.createElement('style');
-    overrideEl.id = OVERRIDE_STYLE_ID;
-    document.head.appendChild(overrideEl);
-    return overrideEl;
-  }
-
   return {
     apply(_mode: ThemeMode): void {
-      getOrCreateStyle().textContent = LIGHT_VARS;
+      addStyles(STYLE_ID, LIGHT_VARS);
     },
     applyOverrides(theme: Partial<Theme>): void {
       const vars: string[] = [];
       for (const [key, varName] of Object.entries(THEME_TO_VAR)) {
         const value = theme[key as keyof Theme];
-        if (value) vars.push(`    ${varName}: ${value};`);
+        if (value && SAFE_CSS_VALUE.test(value) && !/url\s*\(/i.test(value)) {
+          vars.push(`    ${varName}: ${value};`);
+        }
       }
       if (vars.length === 0) { this.clearOverrides(); return; }
-      const el = getOrCreateOverrideStyle();
-      el.textContent = `  :root {\n${vars.join('\n')}\n  }`;
+      addStyles(OVERRIDE_STYLE_ID, `  :host {\n${vars.join('\n')}\n  }`);
     },
     clearOverrides(): void {
-      overrideEl?.remove();
-      document.getElementById(OVERRIDE_STYLE_ID)?.remove();
-      overrideEl = null;
+      removeStyles(OVERRIDE_STYLE_ID);
     },
     dispose(): void {
-      styleEl?.remove();
-      document.getElementById(STYLE_ID)?.remove();
-      styleEl = null;
+      removeStyles(STYLE_ID);
       this.clearOverrides();
     },
   };

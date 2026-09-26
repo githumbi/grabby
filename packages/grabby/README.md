@@ -2,7 +2,7 @@
 
 > Grab any element in your Angular or React app and give it to AI coding agents
 
-Point at any element and press **Cmd+C** (Mac) or **Ctrl+C** (Windows/Linux) to copy the component name, file path, and HTML source code to your clipboard. Paste it into Claude, ChatGPT, Copilot, or any AI coding agent for instant context.
+Press **Option+G** (Mac) or **Alt+G** (Windows/Linux), click any element and add a comment to copy the component name, file path, and HTML source code to your clipboard. Paste it into Claude, ChatGPT, Copilot, or any AI coding agent for instant context.
 
 ## Install
 
@@ -102,10 +102,7 @@ initGrabby({ webhookUrl: '/api/grab' });
 
 ## Usage
 
-Once installed, hover over any UI element in your browser and press:
-
-- **Cmd+C** on Mac
-- **Ctrl+C** on Windows/Linux
+Once installed, press **Option+G** (Mac) or **Alt+G** (Windows/Linux) to enter selection mode, or click the hand icon in the toolbar. Click any element and type a comment.
 
 This copies the element's context to your clipboard:
 
@@ -129,14 +126,16 @@ The output includes the cleaned HTML, the full Angular component stack trace, an
 - **Light-only theme** for all UI
 - **Plugin system** for custom actions, hooks, and theme overrides
 - **Crosshair guidelines** during selection mode
-- **Zero production impact** -- automatically disabled outside dev mode (Angular; React opts in, see above)
+- **Isolated UI** -- everything renders in a shadow root, so page CSS can't break it and it works under strict CSP and Trusted Types
+- **Dev-only by default** -- becomes a no-op in production builds (`ngDevMode` / `process.env.NODE_ENV`)
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| Cmd+C / Ctrl+C (hold) | Activate selection mode |
-| Click | Select element and copy |
+| Option+G / Alt+G | Toggle selection mode |
+| Click | Select element and comment |
+| Escape | Leave selection mode |
 | F (during selection) | Toggle freeze mode |
 | Escape | Cancel comment popover |
 
@@ -144,8 +143,8 @@ The output includes the cleaned HTML, the full Angular component stack trace, an
 
 ```typescript
 provideGrabby({
-  activationKey: 'Meta+C',       // Keyboard shortcut
-  activationMode: 'hold',        // 'hold' or 'toggle'
+  activationKey: 'Alt+G',        // Keyboard shortcut
+  activationMode: 'toggle',      // 'toggle' or 'hold'
   keyHoldDuration: 0,            // ms to hold before activating
   maxContextLines: 20,           // Max HTML lines in clipboard
   enabled: true,                 // Master switch

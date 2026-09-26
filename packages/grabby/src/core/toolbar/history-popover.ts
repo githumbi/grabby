@@ -1,5 +1,7 @@
 import type { HistoryEntry } from '../types';
-import { escapeHtml } from '../utils';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
+import { safeQuery } from '../utils';
+import { h } from '../ui/dom';
 import { Z_INDEX_POPOVER, TOOLBAR_POPOVER_OFFSET } from '../constants';
 
 const POPOVER_ID = '__grabby-history-popover__';
@@ -49,11 +51,9 @@ export function createHistoryPopover(callbacks: HistoryPopoverCallbacks): Histor
   let visible = false;
 
   function injectStyles(): void {
-    if (document.getElementById(STYLE_ID)) return;
+    if (hasStyles(STYLE_ID)) return;
 
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+    addStyles(STYLE_ID, `
       #${POPOVER_ID} {
         position: fixed;
         bottom: ${TOOLBAR_POPOVER_OFFSET};
@@ -205,8 +205,7 @@ export function createHistoryPopover(callbacks: HistoryPopoverCallbacks): Histor
       #${POPOVER_ID} .grabby-history-item-missing {
         opacity: 0.6;
       }
-    `;
-    document.head.appendChild(style);
+    `);
   }
 
   function ensurePopover(): HTMLDivElement {
@@ -217,86 +216,80 @@ export function createHistoryPopover(callbacks: HistoryPopoverCallbacks): Histor
     popover.id = POPOVER_ID;
     popover.setAttribute('role', 'dialog');
     popover.setAttribute('aria-label', 'Grab history');
-    document.body.appendChild(popover);
+    getUiRoot().appendChild(popover);
     return popover;
+  }
+
+  function button(className: string, label: string, onClick: () => void): HTMLButtonElement {
+    return h('button', {
+      type: 'button',
+      class: className,
+      onclick: (e: Event) => { e.stopPropagation(); onClick(); },
+    }, label);
+  }
+
+  function renderItem(entry: HistoryEntry): HTMLButtonElement {
+    const { context } = entry;
+    const meta: Node[] = [];
+    if (context.componentName) meta.push(document.createTextNode(`in ${context.componentName}`));
+    if (context.filePath) {
+      if (meta.length) meta.push(document.createTextNode(' \u2014 '));
+      meta.push(h('a', {
+        class: 'grabby-history-file-link',
+        href: buildVsCodeUri(context.filePath, context.line, context.column),
+        title: 'Open in VS Code',
+      }, shortPath(context.filePath)));
+    }
+
+    const item = h('button', {
+      type: 'button',
+      class: 'grabby-history-item',
+      'aria-label': `Edit comment for ${entry.comment || context.selector}`,
+      dataset: { grabbyHistoryId: entry.id },
+    },
+      h('div', { class: 'grabby-history-info' },
+        entry.comment ? h('div', { class: 'grabby-history-comment-title' }, entry.comment) : null,
+        h('div', { class: 'grabby-history-selector' }, context.selector),
+        meta.length ? h('div', { class: 'grabby-history-meta' }, ...meta) : null,
+      ),
+      h('span', { class: 'grabby-history-time' }, formatRelativeTime(entry.timestamp)),
+    );
+
+    if (!safeQuery(context.selector)) item.classList.add('grabby-history-item-missing');
+    item.addEventListener('mouseenter', () => callbacks.onEntryHover(entry));
+    item.addEventListener('mouseleave', () => callbacks.onEntryHover(null));
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      callbacks.onEntryClick(entry, item);
+    });
+    return item;
   }
 
   function render(entries: HistoryEntry[]): void {
     const el = ensurePopover();
 
-    const hasActions = entries.length > 0;
-    let html = `<div class="grabby-history-header"><span>History</span>${hasActions ? `<span class="grabby-history-actions"><button class="grabby-history-clear-all" data-grabby-clear-all>Clear all</button><button class="grabby-history-copy-all" data-grabby-copy-all>Copy all</button></span>` : ''}</div>`;
-
-    if (entries.length === 0) {
-      html += '<div class="grabby-history-empty">No elements grabbed yet</div>';
-    } else {
-      for (const entry of entries) {
-        const selector = escapeHtml(entry.context.selector);
-        const comp = entry.context.componentName ? escapeHtml(entry.context.componentName) : '';
-        const time = formatRelativeTime(entry.timestamp);
-        let meta = comp ? `in ${comp}` : '';
-        if (entry.context.filePath) {
-          const uri = buildVsCodeUri(entry.context.filePath, entry.context.line, entry.context.column);
-          const fileName = escapeHtml(shortPath(entry.context.filePath));
-          const sep = meta ? ' \u2014 ' : '';
-          meta += `${sep}<a class="grabby-history-file-link" href="${escapeHtml(uri)}" title="Open in VS Code">${fileName}</a>`;
-        }
-
-        const ariaLabel = entry.comment ? escapeHtml(entry.comment) : selector;
-        html += `<button class="grabby-history-item" data-grabby-history-id="${escapeHtml(entry.id)}" aria-label="Edit comment for ${ariaLabel}">`;
-        html += `<div class="grabby-history-info">`;
-        if (entry.comment) {
-          html += `<div class="grabby-history-comment-title">${escapeHtml(entry.comment)}</div>`;
-        }
-        html += `<div class="grabby-history-selector">${selector}</div>`;
-        if (meta) html += `<div class="grabby-history-meta">${meta}</div>`;
-        html += `</div>`;
-        html += `<span class="grabby-history-time">${time}</span>`;
-        html += `</button>`;
-      }
-    }
-
-    el.innerHTML = html;
-
-    const items = el.querySelectorAll<HTMLElement>('.grabby-history-item');
-    items.forEach((item) => {
-      const id = item.dataset.grabbyHistoryId;
-      const entry = entries.find((e) => e.id === id);
-      if (!entry) return;
-
-      if (!document.querySelector(entry.context.selector)) {
-        item.classList.add('grabby-history-item-missing');
-      }
-
-      item.addEventListener('mouseenter', () => callbacks.onEntryHover(entry));
-      item.addEventListener('mouseleave', () => callbacks.onEntryHover(null));
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        callbacks.onEntryClick(entry, item);
-      });
-    });
-
-    const copyAllBtn = el.querySelector('[data-grabby-copy-all]');
-    if (copyAllBtn) {
-      copyAllBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = formatAllEntries(entries);
-        navigator.clipboard.writeText(text).then(() => {
-          const btn = copyAllBtn as HTMLButtonElement;
-          const prev = btn.textContent;
-          btn.textContent = 'Copied!';
-          setTimeout(() => { btn.textContent = prev; }, 1500);
+    const header = h('div', { class: 'grabby-history-header' }, h('span', null, 'History'));
+    if (entries.length > 0) {
+      const copyAll = button('grabby-history-copy-all', 'Copy all', () => {
+        navigator.clipboard.writeText(formatAllEntries(entries)).then(() => {
+          copyAll.textContent = 'Copied!';
+          setTimeout(() => { copyAll.textContent = 'Copy all'; }, 1500);
+        }).catch(() => {
+          copyAll.textContent = 'Copy blocked';
+          setTimeout(() => { copyAll.textContent = 'Copy all'; }, 1500);
         });
       });
+      copyAll.setAttribute('data-grabby-copy-all', '');
+      const clearAll = button('grabby-history-clear-all', 'Clear all', () => callbacks.onClearAll());
+      clearAll.setAttribute('data-grabby-clear-all', '');
+      header.appendChild(h('span', { class: 'grabby-history-actions' }, clearAll, copyAll));
     }
 
-    const clearAllBtn = el.querySelector('[data-grabby-clear-all]');
-    if (clearAllBtn) {
-      clearAllBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        callbacks.onClearAll();
-      });
-    }
+    const body = entries.length === 0
+      ? [h('div', { class: 'grabby-history-empty' }, 'No elements grabbed yet')]
+      : entries.map(renderItem);
+
+    el.replaceChildren(header, ...body);
   }
 
   function formatAllEntries(entries: HistoryEntry[]): string {
@@ -340,7 +333,7 @@ export function createHistoryPopover(callbacks: HistoryPopoverCallbacks): Histor
 
     dispose(): void {
       popover?.remove();
-      document.getElementById(STYLE_ID)?.remove();
+      removeStyles(STYLE_ID);
       popover = null;
       visible = false;
     },

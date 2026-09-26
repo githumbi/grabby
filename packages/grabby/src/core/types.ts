@@ -27,9 +27,9 @@ export interface ToolbarState {
 }
 
 export interface GrabbyOptions {
-  /** Keyboard shortcut to activate. Default: "Meta+C" (Mac) / "Ctrl+C" (Win) */
+  /** Keyboard shortcut to activate. Default: "Alt+G" (Option+G on Mac) */
   activationKey: string;
-  /** Whether activation requires hold or toggle. Default: 'hold' */
+  /** Whether activation requires hold or toggle. Default: 'toggle' */
   activationMode: 'hold' | 'toggle';
   /** Milliseconds to hold before activating in hold mode. Default: 0 */
   keyHoldDuration: number;
@@ -55,6 +55,11 @@ export interface GrabbyOptions {
   webhookUrl: string;
   /** Persist history across page refresh via localStorage. Default: true */
   persistHistory: boolean;
+  /**
+   * CSP nonce for Grabby's `<style>` elements. Only used in browsers without
+   * constructable stylesheets; elsewhere styles need no CSP allowance.
+   */
+  styleNonce?: string;
 }
 
 export interface ComponentStackEntry {

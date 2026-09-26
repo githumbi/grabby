@@ -1,4 +1,5 @@
 import { Z_INDEX_FREEZE } from '../constants';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 
 const FREEZE_ID = '__grabby-freeze-overlay__';
 const FREEZE_STYLE_ID = '__grabby-freeze-styles__';
@@ -29,16 +30,14 @@ export interface FreezeOverlay {
 export function createFreezeOverlay(): FreezeOverlay {
   let overlay: HTMLDivElement | null = null;
   let visible = false;
-  let hoverStyleEl: HTMLStyleElement | null = null;
-  let animStyleEl: HTMLStyleElement | null = null;
+  let hoverRulesActive = false;
+  let animationsFrozen = false;
   let markedElements: Element[] = [];
 
   function injectStyles(): void {
-    if (document.getElementById(FREEZE_STYLE_ID)) return;
+    if (hasStyles(FREEZE_STYLE_ID)) return;
 
-    const style = document.createElement('style');
-    style.id = FREEZE_STYLE_ID;
-    style.textContent = `
+    addStyles(FREEZE_STYLE_ID, `
       #${FREEZE_ID} {
         position: fixed;
         top: 0;
@@ -49,8 +48,7 @@ export function createFreezeOverlay(): FreezeOverlay {
         pointer-events: auto;
         background: transparent;
       }
-    `;
-    document.head.appendChild(style);
+    `);
   }
 
   function ensureOverlay(): HTMLDivElement {
@@ -60,7 +58,7 @@ export function createFreezeOverlay(): FreezeOverlay {
     overlay = document.createElement('div');
     overlay.id = FREEZE_ID;
     overlay.style.display = 'none';
-    document.body.appendChild(overlay);
+    getUiRoot().appendChild(overlay);
     return overlay;
   }
 
@@ -119,7 +117,7 @@ export function createFreezeOverlay(): FreezeOverlay {
    * computed-style snapshotting alone cannot handle.
    */
   function injectHoverRules(): void {
-    if (hoverStyleEl) return;
+    if (hoverRulesActive) return;
 
     const cloned: string[] = [];
 
@@ -135,10 +133,9 @@ export function createFreezeOverlay(): FreezeOverlay {
 
     if (cloned.length === 0) return;
 
-    hoverStyleEl = document.createElement('style');
-    hoverStyleEl.id = HOVER_STYLE_ID;
-    hoverStyleEl.textContent = cloned.join('\n');
-    document.head.appendChild(hoverStyleEl);
+    // These rules restyle page elements, so they go on the document.
+    addStyles(HOVER_STYLE_ID, cloned.join('\n'), 'document');
+    hoverRulesActive = true;
   }
 
   function collectHoverRules(rules: CSSRuleList, out: string[]): void {
@@ -159,29 +156,26 @@ export function createFreezeOverlay(): FreezeOverlay {
   }
 
   function removeHoverRules(): void {
-    hoverStyleEl?.remove();
-    hoverStyleEl = null;
+    removeStyles(HOVER_STYLE_ID);
+    hoverRulesActive = false;
   }
 
   // --- Animation freezing (from react-grab's freeze-animations.ts) ---
 
   function freezeAnimations(): void {
-    if (animStyleEl) return;
-
-    animStyleEl = document.createElement('style');
-    animStyleEl.id = ANIM_STYLE_ID;
-    animStyleEl.textContent = `
+    if (animationsFrozen) return;
+    addStyles(ANIM_STYLE_ID, `
       *, *::before, *::after {
         animation-play-state: paused !important;
         transition: none !important;
       }
-    `;
-    document.head.appendChild(animStyleEl);
+    `, 'document');
+    animationsFrozen = true;
   }
 
   function unfreezeAnimations(): void {
-    animStyleEl?.remove();
-    animStyleEl = null;
+    removeStyles(ANIM_STYLE_ID);
+    animationsFrozen = false;
   }
 
   return {
@@ -231,7 +225,7 @@ export function createFreezeOverlay(): FreezeOverlay {
       unfreezeAnimations();
       unblockEvents();
       overlay?.remove();
-      document.getElementById(FREEZE_STYLE_ID)?.remove();
+      removeStyles(FREEZE_STYLE_ID);
       overlay = null;
       visible = false;
     },

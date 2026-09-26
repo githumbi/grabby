@@ -1,6 +1,8 @@
 import { Z_INDEX_CROSSHAIR } from '../constants';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
 
 const CROSSHAIR_STYLE_ID = '__grabby-crosshair-styles__';
+const CURSOR_STYLE_ID = '__grabby-crosshair-cursor__';
 const H_LINE_ID = '__grabby-crosshair-h__';
 const V_LINE_ID = '__grabby-crosshair-v__';
 
@@ -17,11 +19,9 @@ export function createCrosshair(): Crosshair {
   let listening = false;
 
   function injectStyles(): void {
-    if (document.getElementById(CROSSHAIR_STYLE_ID)) return;
+    if (hasStyles(CROSSHAIR_STYLE_ID)) return;
 
-    const style = document.createElement('style');
-    style.id = CROSSHAIR_STYLE_ID;
-    style.textContent = `
+    addStyles(CROSSHAIR_STYLE_ID, `
       .grabby-crosshair-line {
         position: fixed;
         pointer-events: none;
@@ -40,11 +40,9 @@ export function createCrosshair(): Crosshair {
         bottom: 0;
         width: 1px;
       }
-      body.grabby-crosshair-active {
-        cursor: crosshair !important;
-      }
-    `;
-    document.head.appendChild(style);
+    `);
+    // The cursor rule targets the page itself, so it can't live in the shadow root.
+    addStyles(CURSOR_STYLE_ID, 'body.grabby-crosshair-active { cursor: crosshair !important; }', 'document');
   }
 
   function ensureElements(): void {
@@ -53,13 +51,13 @@ export function createCrosshair(): Crosshair {
       hLine = document.createElement('div');
       hLine.id = H_LINE_ID;
       hLine.className = 'grabby-crosshair-line';
-      document.body.appendChild(hLine);
+      getUiRoot().appendChild(hLine);
     }
     if (!vLine) {
       vLine = document.createElement('div');
       vLine.id = V_LINE_ID;
       vLine.className = 'grabby-crosshair-line';
-      document.body.appendChild(vLine);
+      getUiRoot().appendChild(vLine);
     }
   }
 
@@ -99,7 +97,8 @@ export function createCrosshair(): Crosshair {
       this.deactivate();
       hLine?.remove();
       vLine?.remove();
-      document.getElementById(CROSSHAIR_STYLE_ID)?.remove();
+      removeStyles(CROSSHAIR_STYLE_ID);
+      removeStyles(CURSOR_STYLE_ID);
       hLine = null;
       vLine = null;
     },

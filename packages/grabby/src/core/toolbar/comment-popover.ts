@@ -1,4 +1,5 @@
 import { Z_INDEX_POPOVER } from '../constants';
+import { addStyles, hasStyles, removeStyles, getUiRoot, deepActiveElement, isEditableElement } from '../ui/root';
 
 const POPOVER_ID = '__grabby-comment-popover__';
 const STYLE_ID = '__grabby-comment-styles__';
@@ -38,10 +39,8 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
   let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   function injectStyles(): void {
-    if (document.getElementById(STYLE_ID)) return;
-    const style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = `
+    if (hasStyles(STYLE_ID)) return;
+    addStyles(STYLE_ID, `
       #${POPOVER_ID} {
         position: fixed;
         z-index: ${Z_INDEX_POPOVER};
@@ -87,8 +86,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
         white-space: nowrap;
         text-align: right;
       }
-    `;
-    document.head.appendChild(style);
+    `);
   }
 
   function ensurePopover(): HTMLDivElement {
@@ -106,7 +104,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     hint.textContent = '↵ save · Esc cancel · ⇧↵ newline';
     popover.appendChild(textarea);
     popover.appendChild(hint);
-    document.body.appendChild(popover);
+    getUiRoot().appendChild(popover);
     return popover;
   }
 
@@ -144,10 +142,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
 
   /** True for fields the user could legitimately be typing into instead. */
   function isEditable(el: Element | null): boolean {
-    if (!el || el === textarea) return false;
-    const tag = el.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
-      || (el as HTMLElement).isContentEditable === true;
+    return !!el && el !== textarea && isEditableElement(el);
   }
 
   function attachKey(): void {
@@ -157,8 +152,9 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       // Normally the textarea has focus. If focus was never granted or was
       // stolen by something outside a field, the popover still owns the
       // keyboard — dropping the key here is what silently discarded comments.
-      if (document.activeElement !== textarea) {
-        if (isEditable(document.activeElement)) return;
+      const active = deepActiveElement();
+      if (active !== textarea) {
+        if (isEditable(active)) return;
         textarea.focus();
       }
       e.stopImmediatePropagation();
@@ -226,7 +222,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     },
     dispose(): void {
       doHide();
-      document.getElementById(STYLE_ID)?.remove();
+      removeStyles(STYLE_ID);
     },
   };
 }

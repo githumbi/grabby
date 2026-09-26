@@ -14,7 +14,7 @@ import { createOverlayRenderer } from './overlay/overlay-renderer';
 import { createCrosshair } from './overlay/crosshair';
 import { showToast, disposeToast, type ToastDetail } from './overlay/toast';
 import { createElementPicker } from './picker/element-picker';
-import { createKeyboardHandler, isMac } from './keyboard/keyboard-handler';
+import { createKeyboardHandler } from './keyboard/keyboard-handler';
 import { buildElementContext } from './clipboard/copy';
 import { createPluginRegistry } from './plugins/plugin-registry';
 import { createMcpWebhookPlugin, DEFAULT_WEBHOOK_URL } from './plugins/mcp-webhook-plugin';
@@ -27,6 +27,8 @@ import type { GrabSession } from './toolbar/copy-actions';
 import { createFreezeOverlay } from './overlay/freeze-overlay';
 import { showSelectFeedback, disposeFeedbackStyles } from './overlay/select-feedback';
 import { TOOLBAR_TOAST_OFFSET } from './constants';
+import { safeQuery } from './utils';
+import { isUiNode, eventTarget, isEditableElement, disposeUiRoot, setStyleNonce } from './ui/root';
 import { loadHistory, saveHistory, clearPersistedHistory, flushPendingWrite } from './storage/history-persistence';
 
 const MAX_HISTORY = 50;
@@ -46,8 +48,9 @@ function toHistoryContext(ctx: ElementContext): HistoryContext {
 
 function getDefaultOptions(): GrabbyOptions {
   return {
-    activationKey: isMac() ? 'Meta+C' : 'Ctrl+C',
-    activationMode: 'hold',
+    // Alt/Option+G: the old Cmd/Ctrl+C default swallowed normal copying.
+    activationKey: 'Alt+G',
+    activationMode: 'toggle',
     keyHoldDuration: 0,
     maxContextLines: 20,
     enabled: true,
@@ -65,15 +68,23 @@ export function init(options?: Partial<GrabbyOptions>): GrabbyAPI {
   return createGrabInstance(options);
 }
 
-/** Check Angular's dev mode flag. Returns true if in dev mode or if the flag is absent. */
-function isDevMode(): boolean {
+declare const ngDevMode: unknown;
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * Best guess at whether the host app is a development build. Both checks are
+ * written as bare identifiers on purpose: bundlers replace `ngDevMode` and
+ * `process.env.NODE_ENV` with literals at build time, including inside
+ * dependencies, and a property read off globalThis would never be replaced.
+ */
+export function isDevMode(): boolean {
   try {
-    // Angular sets ngDevMode to false in production builds
-    const ng = (globalThis as any).ngDevMode;
-    return typeof ng === 'undefined' || !!ng;
-  } catch {
-    return true;
-  }
+    if (typeof ngDevMode !== 'undefined' && ngDevMode === false) return false;
+  } catch { /* not an Angular build */ }
+  try {
+    if (process.env.NODE_ENV === 'production') return false;
+  } catch { /* no process shim in this bundle */ }
+  return true;
 }
 
 /** No-op API returned when devOnly is true and the app is in production. */
@@ -106,6 +117,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     return createNoopApi();
   }
 
+  setStyleNonce(merged.styleNonce);
   const store = createStore(merged);
 
   // Seed history from localStorage (if enabled)
@@ -184,7 +196,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   // --- Toolbar element check (aggregates all toolbar-related UI) ---
   function isAnyToolbarElement(el: Element): boolean {
-    return toolbar.isToolbarElement(el)
+    return isUiNode(el)
+      || toolbar.isToolbarElement(el)
       || historyPopover.isPopoverElement(el)
       || commentPopover.isPopoverElement(el)
       || freezeOverlay.isFreezeElement(el);
@@ -323,7 +336,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         overlay.hide();
         return;
       }
-      const el = document.querySelector(entry.context.selector);
+      const el = safeQuery(entry.context.selector);
       if (el) {
         overlay.show(el, entry.context.componentName, null, entry.context.cssClasses);
       } else {
@@ -332,7 +345,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
 
     onEntryClick(entry, rowEl) {
-      const el = document.querySelector(entry.context.selector);
+      const el = safeQuery(entry.context.selector);
       const anchor = el ?? rowEl;
       historyPopover.hide();
       commentPopover.show({
@@ -382,7 +395,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   // --- Close popovers on outside click ---
   function handleDocumentClick(e: MouseEvent): void {
-    const target = e.target as Element | null;
+    const target = eventTarget(e);
     if (!target) return;
     if (isAnyToolbarElement(target)) return;
     if (historyPopover.isVisible() || commentPopover.isVisible()) {
@@ -414,10 +427,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   // --- Freeze key handler (F key during selection mode) ---
   function handleFreezeKey(e: KeyboardEvent): void {
-    if (e.key.toLowerCase() !== 'f') return;
-    const tag = (e.target as Element)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    if ((e.target as HTMLElement)?.isContentEditable) return;
+    if (e.key.toLowerCase() !== 'f' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (isEditableElement(eventTarget(e))) return;
 
     // Allow freeze when active, or when toolbar is visible (just deactivated)
     if (!store.state.active && !store.state.toolbar.visible) return;
@@ -437,9 +448,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   function handleEscapeKey(e: KeyboardEvent): void {
     if (e.key !== 'Escape') return;
     if (!store.state.active) return;
-    const tag = (e.target as Element | null)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    if ((e.target as HTMLElement | null)?.isContentEditable) return;
+    if (isEditableElement(eventTarget(e))) return;
     if (commentPopover.isVisible()) return;
     if (historyPopover.isVisible()) {
       historyPopover.hide();
@@ -558,6 +567,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       commentPopover.dispose();
       themeManager.dispose();
       document.documentElement.style.removeProperty('--grabby-toast-bottom');
+      disposeUiRoot();
     },
   };
 
