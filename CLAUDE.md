@@ -39,7 +39,7 @@ pnpm --dir examples/react-vite dev        # try it in an app
 
 ## State (2026-09-26)
 
-All five milestones are built, tested (187 tests) and committed on stacked local branches, **none pushed yet**:
+All five milestones are built, tested (187 tests) and committed on stacked branches; `grabby-m5` is pushed with a PR into `main`:
 `grabby-m1` rename + security → `grabby-m2` capture + Copy & clear → `grabby-m3` adapters + plugin → `grabby-m4` live mode + server → `grabby-m5` packaging, CI, docs, plus two fixes found on the Mobigrow portal (short hover label; real component names in production React builds). `grabby-m5` contains everything; `main` and `react-support` are still at the old angular-grab code (`2c7a9f7`).
 
 Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; strict CSP + Trusted Types with zero violations; a packed tarball installed into a fresh Vite app.
@@ -48,8 +48,8 @@ Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with t
 
 ## Next steps
 
-1. GitHub: rename the repo `githumbi/angular-grab` → `githumbi/grabby` (the user does this, or asks Claude to run `gh repo rename grabby`), then `git remote set-url origin https://github.com/githumbi/grabby.git`.
-2. Push and merge: push `grabby-m5` and open one PR into `main` (it contains m1–m4), or push each milestone branch as its own PR. CI (`.github/workflows/ci.yml`) runs on the PR.
+1. ~~Rename the repo to `githumbi/grabby`~~ (done 2026-09-26; `origin` updated).
+2. Review and merge the PR from `grabby-m5` into `main` (it contains m1–m4). CI (`.github/workflows/ci.yml`) runs on it.
 3. Repo settings: enable private vulnerability reporting (SECURITY.md relies on it); optionally protect `main`.
 4. First npm publish of `@githumbi/grabby` and `@githumbi/grabby-server` 0.1.0, by hand with 2FA (`pnpm build`, then `pnpm publish --access public` in each package), because npm trusted publishing can only be configured on a package that already exists. Then on npmjs.com add GitHub Actions trusted publishing (repo `githumbi/grabby`, workflow `release.yml`) for both, and later releases go through Changesets.
 5. Optional: rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`, which points at `angular-grab/...`).
