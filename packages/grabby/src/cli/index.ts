@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { parseArgs } from 'util';
 import { init } from './commands/init';
 import { addMcp } from './commands/add-mcp';
+import { SERVER_PACKAGE } from './versions';
 
 const HELP = `Grabby: point at any UI element, leave a comment, hand it to your AI agent.
 
@@ -26,7 +27,7 @@ const [command, subcommand] = argv;
 
 if (command === 'pull') {
   // The collector owns pulling; forward to it so there's one implementation.
-  const args = ['-y', '@githumbi/grabby-server@0', 'pull', ...argv.slice(1)];
+  const args = ['-y', SERVER_PACKAGE, 'pull', ...argv.slice(1)];
   const windows = process.platform === 'win32';
   // npx is a .cmd on Windows, which Node only runs through a shell. Only
   // pass plain flag/value characters so nothing can be interpreted by it.

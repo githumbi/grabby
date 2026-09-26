@@ -3,7 +3,7 @@
  * the full Grabby build is fetched only for someone who opened a feedback
  * link (?grabby=<projectKey>) or when the page calls window.grabby.show().
  *
- *   <script src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1/dist/loader.global.js"
+ *   <script src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1.0/dist/loader.global.js"
  *     data-mode="live" data-server="https://feedback.example.com" data-project-key="pk_…" defer></script>
  */
 (() => {
