@@ -1,9 +1,11 @@
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
 import { createInterface } from 'readline';
 import { detectStack, installCommand, type Stack } from '../utils/detect-stack';
 import { patchViteConfig, patchEntry, patchAngularJson, patchAngularAppConfig, type PatchResult } from '../utils/patch-source';
+import { GRABBY_VERSION, SERVER_PACKAGE } from '../versions';
 
 const PKG = '@githumbi/grabby';
 
@@ -26,6 +28,36 @@ const c = {
   bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
   dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
 };
+
+/**
+ * Subresource Integrity for a script-tag build shipped next to this CLI
+ * (dist/cli → dist). It's the same file jsDelivr serves for this exact
+ * version, so a tampered CDN copy won't run.
+ */
+function sri(file: string): string | null {
+  try {
+    const data = readFileSync(new URL(`../${file}`, import.meta.url));
+    return `sha384-${createHash('sha384').update(data).digest('base64')}`;
+  } catch {
+    return null; // running from source
+  }
+}
+
+/** A script tag pinned to this exact version, with integrity hashes. */
+export function cdnScriptTag(live?: { server: string; projectKey: string }): string {
+  const file = live ? 'loader.global.js' : 'grabby.global.js';
+  const own = sri(file);
+  // The loader fetches the full build itself; data-integrity covers that file.
+  const full = live ? sri('grabby.global.js') : null;
+  const attrs = [
+    `src="https://cdn.jsdelivr.net/npm/${PKG}@${GRABBY_VERSION}/dist/${file}"`,
+    ...(own ? [`integrity="${own}"`, 'crossorigin="anonymous"'] : []),
+    ...(full ? [`data-integrity="${full}"`] : []),
+    ...(live ? ['data-mode="live"', `data-server="${live.server}"`, `data-project-key="${live.projectKey}"`] : []),
+    'defer',
+  ];
+  return `<script ${attrs.join(' ')}></script>`;
+}
 
 const log = (msg = '') => console.log(msg && `${c.cyan('[grabby]')} ${msg}`);
 const warn = (msg: string) => console.log(`${c.yellow('[grabby]')} ${msg}`);
@@ -97,11 +129,8 @@ function plan(stack: Stack, options: InitOptions): { changes: Change[]; manual: 
           : "In a client-only script/plugin: if (import.meta.env.DEV) import('@githumbi/grabby').then((g) => g.initGrabby());",
       );
       break;
-    default: {
-      const attrs = live ? ` data-mode="live" data-server="${live.server}" data-project-key="${live.projectKey}"` : '';
-      const file = live ? 'loader.global.js' : 'grabby.global.js';
-      manual.push(`Add before </body>:\n     <script src="https://cdn.jsdelivr.net/npm/${PKG}@0.1/dist/${file}"${attrs} defer></script>`);
-    }
+    default:
+      manual.push(`Add before </body>:\n     ${cdnScriptTag(live)}`);
   }
 
   return { changes, manual, devDependency: !live };
@@ -164,7 +193,7 @@ export async function init(options: InitOptions = {}): Promise<void> {
   log(c.green('Done.'));
   if (options.live) {
     console.log(`\n  Share this feedback link with reviewers:  ${c.bold(`https://<your-site>/?grabby=${options.live.projectKey}`)}`);
-    console.log(`  Pull their comments:  ${c.bold(`npx @githumbi/grabby-server pull --server ${options.live.server} --token <admin token>`)}\n`);
+    console.log(`  Pull their comments:  ${c.bold(`npx -y ${SERVER_PACKAGE} pull --server ${options.live.server} --token <admin token>`)}\n`);
   } else {
     console.log(`\n  Start your dev server, press ${c.bold('Alt+G')} (${c.bold('Option+G')} on Mac), click anything, and comment.`);
     console.log(`  Then use ${c.bold('Copy all')} and paste into your AI agent.`);

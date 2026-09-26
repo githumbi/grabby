@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup';
+import { versionDefines } from './build-constants';
 
 export default defineConfig([
   // 1. Core and the lazy live entry: ESM (code-split, so /live pulls the
@@ -115,5 +116,6 @@ export default defineConfig([
     sourcemap: true,
     outDir: 'dist',
     banner: { js: '#!/usr/bin/env node' },
+    define: versionDefines,
   },
 ]);

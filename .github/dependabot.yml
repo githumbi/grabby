@@ -4,17 +4,34 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Wait before proposing a new release: hijacked versions are usually
+    # found and pulled within days. Matches minimumReleaseAge in
+    # pnpm-workspace.yaml. (Security updates aren't delayed.)
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    # Minor and patch updates come grouped; each major update gets its own
+    # PR, since majors need their own migration and review.
     groups:
       dev-dependencies:
         dependency-type: development
+        update-types: [minor, patch]
       runtime:
         dependency-type: production
+        update-types: [minor, patch]
     ignore:
       # Example apps track their framework's current major deliberately.
       - dependency-name: '@angular/*'
         update-types: ['version-update:semver-major']
 
+  # Actions are pinned to commit SHAs; Dependabot updates the SHA and the
+  # version comment together.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
