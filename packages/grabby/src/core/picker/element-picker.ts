@@ -3,6 +3,7 @@ import type { Crosshair } from '../overlay/crosshair';
 import type { ComponentResolver, SourceResolver } from '../types';
 import { filterAngularClasses } from '../utils';
 import { promoteTarget } from '../capture/kind';
+import { eventTarget } from '../ui/root';
 import { IGNORE_ATTR } from '../capture/preview';
 
 export interface ElementPicker {
@@ -85,6 +86,11 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
   }
 
   function handleClick(e: MouseEvent): void {
+    // Clicks on Grabby's own UI pass through. Check where the event really
+    // started: keyboard-activated buttons report clientX/Y 0,0, so a hit test
+    // would land on the page and swallow the click.
+    const origin = eventTarget(e);
+    if (origin && deps.isToolbarElement?.(origin)) return;
     const target = rawElementAtPoint(e.clientX, e.clientY);
     if (target && (deps.isToolbarElement?.(target) || deps.crosshair.isCrosshairElement(target))) return;
 

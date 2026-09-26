@@ -51,7 +51,7 @@ describe('UI lives in one shadow root', () => {
 
   beforeEach(() => {
     document.body.innerHTML = '<button id="target">Go</button>';
-    api = init({ mcpWebhook: false, persistHistory: false });
+    api = init({ persistHistory: false });
   });
 
   afterEach(() => {
@@ -79,7 +79,7 @@ describe('activation shortcut', () => {
   let api: GrabbyAPI;
 
   beforeEach(() => {
-    api = init({ mcpWebhook: false, persistHistory: false });
+    api = init({ persistHistory: false });
   });
 
   afterEach(() => {

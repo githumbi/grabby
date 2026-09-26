@@ -21,7 +21,22 @@
       "import": "./dist/core/index.js",
       "require": "./dist/core/index.cjs"
     },
-    "./global": "./dist/core/index.global.js",
+    "./global": {
+      "default": "./dist/grabby.global.js"
+    },
+    "./loader": {
+      "default": "./dist/loader.global.js"
+    },
+    "./live": {
+      "types": "./dist/live/index.d.ts",
+      "import": "./dist/live/index.js",
+      "require": "./dist/live/index.cjs"
+    },
+    "./export": {
+      "types": "./dist/export/index.d.ts",
+      "import": "./dist/export/index.js",
+      "require": "./dist/export/index.cjs"
+    },
     "./angular": {
       "types": "./dist/angular/index.d.ts",
       "import": "./dist/angular/index.js"
@@ -134,5 +149,11 @@
     "vite",
     "webpack",
     "esbuild"
+  ],
+  "unpkg": "./dist/grabby.global.js",
+  "jsdelivr": "./dist/grabby.global.js",
+  "sideEffects": [
+    "./dist/grabby.global.js",
+    "./dist/loader.global.js"
   ]
 }

@@ -1,5 +1,6 @@
 import { Z_INDEX_POPOVER } from '../constants';
 import { addStyles, hasStyles, removeStyles, getUiRoot, deepActiveElement, isEditableElement } from '../ui/root';
+import { h } from '../ui/dom';
 
 const POPOVER_ID = '__grabby-comment-popover__';
 const STYLE_ID = '__grabby-comment-styles__';
@@ -11,6 +12,13 @@ export interface CommentShowOpts {
   initialValue?: string;
   mode: CommentMode;
   entryId?: string;
+  /** Ask who's commenting (name or anonymous) before saving. */
+  askIdentity?: boolean;
+}
+
+/** What the commenter chose on the identity step. */
+export interface IdentityChoice {
+  name: string | null;
 }
 
 export interface CommentCtx {
@@ -19,7 +27,7 @@ export interface CommentCtx {
 }
 
 export interface CommentPopoverCallbacks {
-  onSubmit(value: string, ctx: CommentCtx): void;
+  onSubmit(value: string, ctx: CommentCtx, identity?: IdentityChoice): void;
   onCancel(ctx: CommentCtx): void;
 }
 
@@ -37,6 +45,10 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
   let visible = false;
   let currentCtx: CommentCtx = { mode: 'new' };
   let keydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  let askIdentity = false;
+  let stage: 'comment' | 'identity' = 'comment';
+  let pendingValue = '';
+  let nameInput: HTMLInputElement | null = null;
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -79,6 +91,23 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       }
       #${POPOVER_ID} textarea::placeholder {
         color: var(--grabby-text-muted, #94a3b8);
+      }
+      #${POPOVER_ID} .grabby-cp-title { font: 600 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--grabby-popover-text, #334155); }
+      #${POPOVER_ID} .grabby-cp-sub { font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--grabby-text-muted, #94a3b8); }
+      #${POPOVER_ID} .grabby-cp-name {
+        width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; outline: none;
+        border: 1px solid var(--grabby-popover-border, #e2e8f0); background: var(--grabby-surface, #f1f5f9);
+        color: var(--grabby-popover-text, #334155); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #${POPOVER_ID} .grabby-cp-name:focus { border-color: var(--grabby-accent, #2563eb); }
+      #${POPOVER_ID} .grabby-cp-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+      #${POPOVER_ID} .grabby-cp-post {
+        font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--grabby-accent, #2563eb); background: var(--grabby-accent, #2563eb); color: #fff;
+      }
+      #${POPOVER_ID} .grabby-cp-link {
+        font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 4px; border: none;
+        background: transparent; color: var(--grabby-text-muted, #64748b); cursor: pointer; text-decoration: underline;
       }
       #${POPOVER_ID} .grabby-cp-hint {
         font-size: 11px;
@@ -142,13 +171,65 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
 
   /** True for fields the user could legitimately be typing into instead. */
   function isEditable(el: Element | null): boolean {
-    return !!el && el !== textarea && isEditableElement(el);
+    return !!el && el !== textarea && el !== nameInput && isEditableElement(el);
+  }
+
+  function finish(identity?: IdentityChoice): void {
+    const ctx = currentCtx;
+    const value = pendingValue;
+    doHide();
+    if (identity) callbacks.onSubmit(value, ctx, identity);
+    else callbacks.onSubmit(value, ctx);
+  }
+
+  /**
+   * Second step, shown once per browser: who is this from? Asking after the
+   * comment is written (not before) keeps the first interaction to "click
+   * and type", which is what gets non-technical reviewers to leave feedback.
+   */
+  function showIdentityStep(): void {
+    if (!popover) return;
+    stage = 'identity';
+    nameInput = h('input', {
+      type: 'text',
+      class: 'grabby-cp-name',
+      placeholder: 'Your name',
+      maxlength: '80',
+      autocomplete: 'name',
+      'aria-label': 'Your name',
+    });
+    const post = () => finish({ name: nameInput?.value.trim() || null });
+    popover.replaceChildren(
+      h('div', { class: 'grabby-cp-title' }, 'Thanks! Who is this from?'),
+      h('div', { class: 'grabby-cp-sub' }, 'Your name helps the team follow up. It\'s remembered in this browser.'),
+      nameInput,
+      h('div', { class: 'grabby-cp-actions' },
+        h('button', { type: 'button', class: 'grabby-cp-link', 'data-grabby-anonymous': '', onclick: (e: Event) => { e.stopPropagation(); finish({ name: null }); } }, 'Post anonymously'),
+        h('button', { type: 'button', class: 'grabby-cp-post', 'data-grabby-post': '', onclick: (e: Event) => { e.stopPropagation(); post(); } }, 'Post'),
+      ),
+    );
+    nameInput.focus();
   }
 
   function attachKey(): void {
     if (keydownHandler) return;
     keydownHandler = (e: KeyboardEvent) => {
-      if (!textarea || !visible) return;
+      if (!visible) return;
+      if (stage === 'identity') {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const ctx = currentCtx;
+          doHide();
+          callbacks.onCancel(ctx);
+        } else if (e.key === 'Enter' && deepActiveElement() === nameInput) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          finish({ name: nameInput?.value.trim() || null });
+        }
+        return;
+      }
+      if (!textarea) return;
       // Normally the textarea has focus. If focus was never granted or was
       // stolen by something outside a field, the popover still owns the
       // keyboard — dropping the key here is what silently discarded comments.
@@ -162,9 +243,9 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
         e.preventDefault();
         const v = textarea.value.trim();
         if (!v) return;
-        const ctx = currentCtx;
-        doHide();
-        callbacks.onSubmit(v, ctx);
+        pendingValue = v;
+        if (askIdentity) showIdentityStep();
+        else finish();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         const ctx = currentCtx;
@@ -187,6 +268,8 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     popover?.remove();
     popover = null;
     textarea = null;
+    nameInput = null;
+    stage = 'comment';
     detachKey();
   }
 
@@ -196,6 +279,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       const el = ensurePopover();
       textarea!.value = opts.initialValue ?? '';
       currentCtx = { mode: opts.mode, entryId: opts.entryId };
+      askIdentity = opts.askIdentity === true && opts.mode === 'new';
       visible = true;
       position(el, opts.anchor);
       attachKey();

@@ -60,7 +60,7 @@ describe('commenting and copying', () => {
 
   it('saves the comment without touching the clipboard by default', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
 
     await comment(document.getElementById('save')!, 'make it primary');
 
@@ -71,7 +71,7 @@ describe('commenting and copying', () => {
 
   it('captures a compact target instead of outerHTML, and never field values', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
 
     await comment(document.getElementById('save')!, 'a');
     await comment(document.getElementById('email')!, 'b');
@@ -87,7 +87,7 @@ describe('commenting and copying', () => {
 
   it('promotes a click on an icon inside a button to the button', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
 
     await comment(document.getElementById('icon')!, 'icon click');
 
@@ -96,7 +96,7 @@ describe('commenting and copying', () => {
 
   it('persists comments and fires onComment', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
     const onComment = vi.fn();
     api.registerPlugin({ name: 'probe', hooks: { onComment } });
 
@@ -110,7 +110,7 @@ describe('commenting and copying', () => {
 
   it('Copy & clear copies every comment, then clears them with an Undo', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
     await comment(document.getElementById('save')!, 'first');
     await comment(document.getElementById('email')!, 'second');
 
@@ -132,7 +132,7 @@ describe('commenting and copying', () => {
 
   it('Copy, keep comments leaves them in place for next time', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
     await comment(document.getElementById('save')!, 'keep me');
 
     await openCopySheet();
@@ -145,7 +145,7 @@ describe('commenting and copying', () => {
 
   it('clears nothing and explains when the clipboard refuses', async () => {
     setClipboard(() => Promise.reject(new DOMException('Document is not focused.', 'NotAllowedError')));
-    api = init({ mcpWebhook: false, screenshots: false });
+    api = init({ screenshots: false });
     const onCopyError = vi.fn();
     api.registerPlugin({ name: 'probe', hooks: { onCopyError } });
     await comment(document.getElementById('save')!, 'still here');
@@ -162,12 +162,36 @@ describe('commenting and copying', () => {
 
   it('copies each comment immediately when copyOnComment is on', async () => {
     setClipboard(() => Promise.resolve());
-    api = init({ mcpWebhook: false, screenshots: false, copyOnComment: true });
+    api = init({ screenshots: false, copyOnComment: true });
 
     await comment(document.getElementById('save')!, 'instant');
 
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText.mock.calls[0][0]).toContain('instant');
     expect(api.getComments()).toHaveLength(1);
+  });
+});
+
+describe('keyboard use while selecting', () => {
+  it('lets a keyboard-activated button inside Grabby work during selection', async () => {
+    document.body.innerHTML = '<button id="save">Save</button>';
+    const api = init({ screenshots: false, identity: 'ask' });
+    const el = document.getElementById('save')!;
+    document.elementFromPoint = () => el;
+    api.activate();
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 1 }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    const ta = queryUi<HTMLTextAreaElement>('textarea')!;
+    ta.value = 'from the keyboard';
+    ta.focus();
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, composed: true }));
+    // .click() has no coordinates, like Enter/Space on a focused button.
+    queryUi<HTMLButtonElement>('[data-grabby-anonymous]')!.click();
+    expect(api.getComments().map((c) => c.comment)).toEqual(['from the keyboard']);
+    expect(api.getComments()[0].author.anonymous).toBe(true);
+    api.dispose();
+    disposeUiRoot();
+    document.body.innerHTML = '';
+    localStorage.clear();
   });
 });

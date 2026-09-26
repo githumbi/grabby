@@ -26,7 +26,23 @@ export interface CommentsPanelCallbacks {
   onDelete: (comment: GrabbyComment) => void;
   onCopyAll: () => void;
   onClearAll: () => void;
+  /** Live mode: forget the stored name so the next comment asks again. */
+  onChangeIdentity?: () => void;
 }
+
+export interface CommentsPanelOptions {
+  /**
+   * 'live' is for reviewers on a deployed site: their comments go to the
+   * server, so there's no Copy all, and each row shows whether it was sent.
+   */
+  variant?: 'local' | 'live';
+  /** Show delivery status on each row (a server is configured). */
+  showSync?: boolean;
+  /** "Jane", "anonymous", or null when identity isn't used. */
+  identityLabel?: () => string | null;
+}
+
+const SYNC_LABEL: Record<string, string> = { pending: 'Sending…', sent: 'Sent', failed: 'Not sent' };
 
 export function formatRelativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -127,6 +143,10 @@ const CSS = `
   }
   .grabby-comment-row:hover .grabby-comment-delete, .grabby-comment-delete:focus-visible { opacity: 1; }
   .grabby-comment-delete:hover { background: var(--grabby-surface, #e2e8f0); color: #dc2626; }
+  .grabby-sync { font-weight: 600; }
+  .grabby-sync-pending { color: #b45309; }
+  .grabby-sync-sent { color: #15803d; }
+  .grabby-sync-failed { color: #b91c1c; }
   .grabby-panel-footer {
     display: flex; justify-content: space-between; align-items: center;
     padding: 6px 8px 6px 14px; border-top: 1px solid var(--grabby-popover-border, #e2e8f0);
@@ -134,7 +154,8 @@ const CSS = `
   }
 `;
 
-export function createCommentsPanel(callbacks: CommentsPanelCallbacks): CommentsPanel {
+export function createCommentsPanel(callbacks: CommentsPanelCallbacks, options: CommentsPanelOptions = {}): CommentsPanel {
+  const live = options.variant === 'live';
   let panel: HTMLDivElement | null = null;
   let visible = false;
   let objectUrls: string[] = [];
@@ -178,8 +199,12 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks): Comments
     } else if (!t.component) {
       meta.push(document.createTextNode(`<${t.tag}>`));
     }
-    const tail = [showAuthors ? authorLabel(comment.author) : '', formatRelativeTime(comment.createdAt)].filter(Boolean);
+    const tail = [showAuthors && !live ? authorLabel(comment.author) : '', formatRelativeTime(comment.createdAt)].filter(Boolean);
     meta.push(document.createTextNode(` · ${tail.join(' · ')}`));
+    if (options.showSync && comment.sync) {
+      meta.push(document.createTextNode(' · '));
+      meta.push(h('span', { class: `grabby-sync grabby-sync-${comment.sync}` }, SYNC_LABEL[comment.sync] ?? comment.sync));
+    }
 
     const del = h('button', {
       type: 'button',
@@ -222,8 +247,8 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks): Comments
     const showAuthors = sessions.size > 1 || comments.some((c) => !c.author.anonymous);
 
     const header = h('div', { class: 'grabby-panel-header' },
-      h('span', { class: 'grabby-panel-title' }, 'Comments', h('span', { class: 'grabby-panel-count' }, String(n))),
-      n > 0 ? h('button', {
+      h('span', { class: 'grabby-panel-title' }, live ? 'Your feedback' : 'Comments', h('span', { class: 'grabby-panel-count' }, String(n))),
+      n > 0 && !live ? h('button', {
         type: 'button',
         class: 'grabby-btn grabby-btn-primary',
         'data-grabby-copy-all': '',
@@ -233,20 +258,33 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks): Comments
 
     const list = n === 0
       ? h('div', { class: 'grabby-panel-empty' },
-        h('strong', null, 'No comments yet'),
-        'Click the hand icon (or press Alt+G), then click anything on the page to comment on it.')
+        h('strong', null, live ? 'Nothing sent yet' : 'No comments yet'),
+        live
+          ? 'Click Comment, then click the part of the page you want to talk about.'
+          : 'Click the hand icon (or press Alt+G), then click anything on the page to comment on it.')
       : h('div', { class: 'grabby-panel-list' }, ...comments.map((c) => row(c, showAuthors)));
 
-    const footer = n > 0
-      ? h('div', { class: 'grabby-panel-footer' },
+    const who = options.identityLabel?.() ?? null;
+    let footer: HTMLElement | null = null;
+    if (live && who) {
+      footer = h('div', { class: 'grabby-panel-footer' },
+        h('span', null, `Commenting as ${who}`),
+        h('button', {
+          type: 'button',
+          class: 'grabby-btn grabby-btn-link',
+          'data-grabby-change-identity': '',
+          onclick: (e: Event) => { e.stopPropagation(); callbacks.onChangeIdentity?.(); },
+        }, 'Change'));
+    } else if (!live && n > 0) {
+      footer = h('div', { class: 'grabby-panel-footer' },
         h('span', null, 'Click a comment to edit it'),
         h('button', {
           type: 'button',
           class: 'grabby-btn grabby-btn-link',
           'data-grabby-clear-all': '',
           onclick: (e: Event) => { e.stopPropagation(); callbacks.onClearAll(); },
-        }, 'Clear all'))
-      : null;
+        }, 'Clear all'));
+    }
 
     el.replaceChildren(header, list, ...(footer ? [footer] : []));
   }

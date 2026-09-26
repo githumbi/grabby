@@ -1,7 +1,5 @@
 import type { Plugin, GrabbyComment } from '../types';
 
-export const DEFAULT_WEBHOOK_URL = 'http://localhost:3456/grab';
-
 /** https anywhere, or plain http only to this machine. */
 export function isAllowedWebhookUrl(raw: string): boolean {
   try {
@@ -17,14 +15,14 @@ export function isAllowedWebhookUrl(raw: string): boolean {
  * POSTs each saved comment, one per request, as JSON. Credentials are never
  * sent: a same-origin webhook would otherwise receive the page's cookies.
  */
-export function createMcpWebhookPlugin(url: string = DEFAULT_WEBHOOK_URL): Plugin {
+export function createWebhookPlugin(url: string): Plugin {
   if (!isAllowedWebhookUrl(url)) {
     // eslint-disable-next-line no-console
     console.warn(`[grabby] webhookUrl must be https:// or http://localhost; ignoring "${url}".`);
-    return { name: 'mcp-webhook' };
+    return { name: 'webhook' };
   }
   return {
-    name: 'mcp-webhook',
+    name: 'webhook',
     hooks: {
       onComment(comment: GrabbyComment) {
         fetch(url, {

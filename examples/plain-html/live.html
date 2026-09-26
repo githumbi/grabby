@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grabby · live feedback example</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; color: #111827; background: #fff; }
+      .nav { display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; border-bottom: 1px solid #e5e7eb; }
+      .hero { max-width: 720px; margin: 64px auto; text-align: center; padding: 0 20px; }
+      .hero h1 { font-size: 44px; line-height: 1.1; margin: 0 0 16px; }
+      .hero p { font-size: 18px; color: #4b5563; }
+      .cta { background: #111827; color: #fff; border: 0; padding: 14px 22px; border-radius: 10px; font-size: 16px; font-weight: 600; }
+      .note { max-width: 720px; margin: 0 auto; padding: 16px 20px; background: #f9fafb; border-radius: 10px; color: #6b7280; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <nav class="nav" data-component="Nav"><strong>Acme Analytics</strong><a href="/login">Sign in</a></nav>
+    <section class="hero" data-component="Hero">
+      <h1>Know what your customers do next</h1>
+      <p>Product analytics that answers questions in plain English.</p>
+      <button class="cta">Start free trial</button>
+    </section>
+    <p class="note">
+      A normal visitor sees nothing here. Open <a href="?grabby=pk_demo_local_only">this page with the feedback link</a>
+      to see the reviewer experience. Start the collector first (see README).
+    </p>
+
+    <script
+      src="/node_modules/@githumbi/grabby/dist/loader.global.js"
+      data-mode="live"
+      data-server="http://localhost:3456"
+      data-project-key="pk_demo_local_only"
+      defer
+    ></script>
+  </body>
+</html>

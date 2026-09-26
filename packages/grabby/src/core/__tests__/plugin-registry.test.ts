@@ -21,6 +21,9 @@ function makeMockApi(): GrabbyAPI {
     exportComments: vi.fn(() => ''),
     deleteComment: vi.fn(),
     clearComments: vi.fn(),
+    identify: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
     dispose: vi.fn(),
   };
 }

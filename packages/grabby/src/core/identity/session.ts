@@ -59,6 +59,10 @@ export function saveIdentity(identity: StoredIdentity): void {
   try { localStorage.setItem(AUTHOR_KEY, JSON.stringify(identity)); } catch { /* storage unavailable */ }
 }
 
+export function clearIdentity(): void {
+  try { localStorage.removeItem(AUTHOR_KEY); } catch { /* ignore */ }
+}
+
 export function currentAuthor(identity: StoredIdentity | null): CommentAuthor {
   return {
     name: identity && !identity.anonymous ? identity.name : null,

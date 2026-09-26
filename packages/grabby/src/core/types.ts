@@ -43,6 +43,8 @@ export interface CommentAuthor {
   anonymous: boolean;
   /** Stable random id per browser, so anonymous commenters stay distinguishable. */
   sessionId: string;
+  /** The host app's own user id, when it called `identify()`. */
+  userId?: string;
 }
 
 export interface PageInfo {
@@ -72,6 +74,8 @@ export interface GrabbyComment {
   target: GrabbyTarget;
   screenshot: ScreenshotRef | null;
   framework: string;
+  /** Delivery to a Grabby server, when one is configured. Browser-only. */
+  sync?: 'pending' | 'sent' | 'failed';
 }
 
 export interface ToolbarState {
@@ -97,14 +101,29 @@ export interface GrabbyOptions {
   showToolbar: boolean;
   /** Theme mode for all UI. Default: 'light' */
   themeMode: ThemeMode;
-  /** Auto-register MCP webhook plugin to POST grabs to localhost:3456. Default: true */
-  mcpWebhook: boolean;
   /**
-   * Where grabs are POSTed. Default: "http://localhost:3456/grab" (the local
-   * MCP server). Point it at a same-origin endpoint to collect grabs from a
-   * deployed site, where localhost isn't reachable.
+   * 'local' (default): for developers on their own machine; dev builds only.
+   * 'live': for collecting feedback on a deployed site. Grabby stays hidden
+   * until someone opens a feedback link (?grabby=<projectKey>), and works in
+   * production builds.
    */
-  webhookUrl: string;
+  mode: 'local' | 'live';
+  /**
+   * A grabby-server URL. Comments are saved in the browser and delivered
+   * there (with retries), where you pull them or your agent reads them over
+   * MCP. Locally: 'http://localhost:3456'.
+   */
+  server?: string;
+  /** The project's public key from `grabby-server init`. Required for a public server. */
+  projectKey?: string;
+  /**
+   * Who a comment is from. 'ask' prompts for a name (or anonymous) on the
+   * first comment; 'anonymous' never asks; 'none' skips identity entirely.
+   * Default: 'ask' in live mode, 'none' locally.
+   */
+  identity?: 'ask' | 'anonymous' | 'none';
+  /** Also POST each comment as JSON to this URL (https, or http://localhost). */
+  webhookUrl?: string;
   /** Persist comments across page refresh via localStorage. Default: true */
   persistHistory: boolean;
   /**
@@ -227,5 +246,14 @@ export interface GrabbyAPI {
   exportComments(options?: { level?: DetailLevel; ids?: string[] }): string;
   deleteComment(id: string): void;
   clearComments(): void;
+  /**
+   * Tell Grabby who is signed in, so commenters aren't asked for a name.
+   * Pass null on sign-out.
+   */
+  identify(user: { id?: string; name: string } | null): void;
+  /** Show Grabby. In live mode this starts a feedback session for this tab. */
+  show(): void;
+  /** Hide Grabby. In live mode this ends the feedback session. */
+  hide(): void;
   dispose(): void;
 }

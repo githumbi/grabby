@@ -15,12 +15,16 @@ import { showToast, disposeToast, type ToastDetail } from './overlay/toast';
 import { createElementPicker } from './picker/element-picker';
 import { createKeyboardHandler } from './keyboard/keyboard-handler';
 import { createPluginRegistry } from './plugins/plugin-registry';
-import { createMcpWebhookPlugin, DEFAULT_WEBHOOK_URL } from './plugins/mcp-webhook-plugin';
+import { createWebhookPlugin } from './plugins/webhook-plugin';
 import { createThemeManager } from './toolbar/theme-manager';
 import { createToolbarRenderer } from './toolbar/toolbar-renderer';
 import { createCommentsPanel } from './toolbar/comments-panel';
 import { createCommentPopover } from './toolbar/comment-popover';
 import { createCopySheet, type CopyMode } from './toolbar/copy-sheet';
+import { createCoachMark } from './toolbar/coach-mark';
+import { createOutbox, type Outbox, type SyncState } from './sync/outbox';
+import { consumeFeedbackLink, startFeedbackSession, endFeedbackSession } from './live/activation';
+import { getScreenshot } from './storage/screenshot-store';
 import { createFreezeOverlay } from './overlay/freeze-overlay';
 import { showSelectFeedback, disposeFeedbackStyles } from './overlay/select-feedback';
 import { TOOLBAR_TOAST_OFFSET } from './constants';
@@ -33,7 +37,7 @@ import { captureScreenshot, type Screenshot } from './capture/screenshot';
 import { formatExport } from './capture/export';
 import { sanitizeRoute } from './capture/redact';
 import { disposeStyleBaseline } from './capture/styles';
-import { randomId, currentAuthor, loadIdentity } from './identity/session';
+import { randomId, currentAuthor, loadIdentity, saveIdentity, clearIdentity, getSessionId } from './identity/session';
 import { composeAdapters, DEFAULT_ADAPTERS } from './adapters';
 import { isNoiseClass } from './capture/preview';
 
@@ -53,8 +57,7 @@ function getDefaultOptions(): GrabbyOptions {
     devOnly: true,
     showToolbar: true,
     themeMode: 'light',
-    mcpWebhook: true,
-    webhookUrl: DEFAULT_WEBHOOK_URL,
+    mode: 'local',
     persistHistory: true,
     copyOnComment: false,
     detailLevel: 'standard',
@@ -64,7 +67,63 @@ function getDefaultOptions(): GrabbyOptions {
 }
 
 export function init(options?: Partial<GrabbyOptions>): GrabbyAPI {
+  if (options?.mode === 'live' && !consumeFeedbackLink(options.projectKey)) {
+    return createDormantApi(options);
+  }
   return createGrabInstance(options);
+}
+
+/**
+ * Live mode for a visitor who didn't open a feedback link: no UI and no
+ * listeners. `show()` starts a feedback session and boots the real thing;
+ * anything configured before that is replayed onto it. Undelivered comments
+ * from an earlier visit are still sent in the background.
+ */
+function createDormantApi(options: Partial<GrabbyOptions>): GrabbyAPI {
+  let real: GrabbyAPI | null = null;
+  const queued: Array<(api: GrabbyAPI) => void> = [];
+  const later = (fn: (api: GrabbyAPI) => void) => { if (real) fn(real); else queued.push(fn); };
+  const flusher = options.server ? flushLeftovers(options) : null;
+
+  const api: GrabbyAPI = {
+    ...createNoopApi(),
+    setOptions: (o) => later((a) => a.setOptions(o)),
+    registerPlugin: (p) => later((a) => a.registerPlugin(p)),
+    unregisterPlugin: (n) => later((a) => a.unregisterPlugin(n)),
+    setComponentResolver: (r) => later((a) => a.setComponentResolver(r)),
+    setSourceResolver: (r) => later((a) => a.setSourceResolver(r)),
+    identify: (u) => later((a) => a.identify(u)),
+    show() {
+      if (real) { real.show(); return; }
+      flusher?.dispose();
+      startFeedbackSession();
+      real = createGrabInstance(options);
+      for (const fn of queued.splice(0)) fn(real);
+      // From here on the dormant handle simply forwards.
+      Object.assign(api, real);
+    },
+  };
+  return api;
+}
+
+/** Delivers comments queued on an earlier visit, without any UI. */
+function flushLeftovers(options: Partial<GrabbyOptions>): Outbox | null {
+  try {
+    if (!localStorage.getItem('grabby:v1:outbox')) return null;
+  } catch {
+    return null;
+  }
+  let comments = loadHistory();
+  return createOutbox({
+    server: options.server!,
+    projectKey: options.projectKey,
+    getComment: (id) => comments.find((c) => c.id === id),
+    getScreenshot,
+    onState(id, state) {
+      comments = comments.map((c) => (c.id === id ? { ...c, sync: state } : c));
+      saveHistory(comments);
+    },
+  });
 }
 
 declare const ngDevMode: unknown;
@@ -118,6 +177,9 @@ export function createNoopApi(): GrabbyAPI {
     exportComments: () => '',
     deleteComment: noop,
     clearComments: noop,
+    identify: noop,
+    show: noop,
+    hide: noop,
     dispose: noop,
   };
 }
@@ -126,9 +188,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   const defaults = getDefaultOptions();
   const merged: GrabbyOptions = { ...defaults, ...options };
 
-  if (merged.devOnly && !isDevMode()) {
+  const live = merged.mode === 'live';
+  // Live mode is meant for production builds; local mode stays out of them.
+  if (!live && merged.devOnly && !isDevMode()) {
     return createNoopApi();
   }
+  const identityMode = merged.identity ?? (live ? 'ask' : 'none');
+  let identifiedUser: { id?: string; name: string } | null = null;
 
   setStyleNonce(merged.styleNonce);
   const store = createStore(merged);
@@ -146,6 +212,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   const freezeOverlay = createFreezeOverlay();
   const pluginRegistry = createPluginRegistry();
   const themeManager = createThemeManager();
+  const coachMark = createCoachMark();
+  let outbox: Outbox | null = null;
 
   // Adapters are tried per element, so a late-mounting app or a page mixing
   // frameworks still resolves. Explicit resolvers (setComponentResolver)
@@ -182,6 +250,35 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     return pluginRegistry.callTransformHook(text, list);
   }
 
+  function authorNow(): GrabbyComment['author'] {
+    if (identityMode === 'anonymous') return { name: null, anonymous: true, sessionId: getSessionId() };
+    if (identifiedUser) {
+      return { name: identifiedUser.name, anonymous: false, sessionId: getSessionId(), ...(identifiedUser.id ? { userId: identifiedUser.id } : {}) };
+    }
+    return currentAuthor(loadIdentity());
+  }
+
+  /** Ask for a name only when we'd otherwise have to guess. */
+  function shouldAskIdentity(): boolean {
+    return identityMode === 'ask' && !identifiedUser && !loadIdentity();
+  }
+
+  function identityLabel(): string | null {
+    if (identityMode !== 'ask') return null;
+    if (identifiedUser) return identifiedUser.name;
+    const stored = loadIdentity();
+    if (!stored) return null;
+    return stored.anonymous || !stored.name ? 'anonymous' : stored.name;
+  }
+
+  function setSync(id: string, state: SyncState): void {
+    const current = comments().find((c) => c.id === id);
+    if (!current || current.sync === state) return;
+    setComments(comments().map((c) => (c.id === id ? { ...c, sync: state } : c)));
+    if (live && state === 'sent') showToast('Feedback sent. Thank you!');
+    if (live && state === 'failed') showToast('Your feedback couldn\'t be sent. Please try again later.');
+  }
+
   function toastDetail(c: GrabbyComment): ToastDetail {
     return {
       componentName: c.target.component,
@@ -200,7 +297,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       updatedAt: now,
       status: 'open',
       comment: text,
-      author: currentAuthor(loadIdentity()),
+      author: authorNow(),
       page: {
         route: sanitizeRoute(location, store.state.options.captureQueryParams),
         title: document.title,
@@ -209,14 +306,20 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       target: captureTarget(element, { componentResolver, sourceResolver, cleanClasses }),
       screenshot: null,
       framework: adapters.frameworkFor(element),
+      ...(outbox ? { sync: 'pending' as const } : {}),
     };
 
     setComments([comment, ...comments()].slice(0, MAX_COMMENTS));
     pluginRegistry.callHook('onComment', comment, element);
+    outbox?.send(comment.id);
 
     if (shot) void attachScreenshot(comment.id, shot);
 
     const count = comments().length;
+    if (live) {
+      showToast('Thanks! Sending your feedback…');
+      return comment;
+    }
     const copyAction = { label: count === 1 ? 'Copy' : `Copy all ${count}`, onClick: openCopySheet, primary: true };
     if (store.state.options.copyOnComment) {
       void writeClipboard(exportText([comment], level)).then((ok) => {
@@ -247,6 +350,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     const updated: GrabbyComment = { ...current, screenshot: { localId: id, width: result.width, height: result.height } };
     setComments(comments().map((c) => (c.id === id ? updated : c)));
     pluginRegistry.callHook('onScreenshot', updated, result.blob);
+    outbox?.sendScreenshot(id);
   }
 
   // --- Removing comments, with Undo ---
@@ -335,8 +439,9 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       selectedElement = element;
       pendingShot = store.state.options.screenshots ? captureScreenshot(element) : null;
       pluginRegistry.callHook('onElementSelect', element);
+      coachMark.dismiss();
       showSelectFeedback(element);
-      commentPopover.show({ anchor: element, mode: 'new' });
+      commentPopover.show({ anchor: element, mode: 'new', askIdentity: shouldAskIdentity() });
     },
   });
 
@@ -413,11 +518,14 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
     onDismiss() {
       closeAllPopovers();
+      coachMark.dismiss();
       doDeactivate(true);
       store.state.toolbar = { ...store.state.toolbar, visible: false };
       toolbar.hide();
+      // Leaving feedback mode on a live site: the next page load is a normal visit.
+      if (live) endFeedbackSession();
     },
-  });
+  }, live ? { label: 'Comment', dismissLabel: 'Exit feedback mode', hideEnable: true } : {});
 
   // --- Comments panel ---
   const commentsPanel = createCommentsPanel({
@@ -458,7 +566,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       removeComments(comments().map((c) => c.id), `Cleared ${n} comment${n === 1 ? '' : 's'}`);
       commentsPanel.hide();
     },
-  });
+
+    onChangeIdentity() {
+      clearIdentity();
+      commentsPanel.refresh(comments());
+      showToast('We\'ll ask for your name on your next comment');
+    },
+  }, { variant: live ? 'live' : 'local', showSync: !!merged.server, identityLabel });
 
   // --- Copy sheet ---
   const copySheet = createCopySheet({
@@ -483,7 +597,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   // --- Comment popover ---
   const commentPopover = createCommentPopover({
-    onSubmit(value, ctx) {
+    onSubmit(value, ctx, identity) {
+      if (identity) saveIdentity({ name: identity.name, anonymous: !identity.name });
       if (ctx.mode === 'new') {
         const element = selectedElement;
         const shot = pendingShot;
@@ -495,9 +610,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       }
       if (!ctx.entryId) return;
       const updated = comments().map((c) =>
-        c.id === ctx.entryId ? { ...c, comment: value, updatedAt: Date.now() } : c,
+        c.id === ctx.entryId ? { ...c, comment: value, updatedAt: Date.now(), ...(outbox ? { sync: 'pending' as const } : {}) } : c,
       );
       setComments(updated);
+      // The server treats a re-send from the same session as an edit.
+      outbox?.send(ctx.entryId);
       showToast('Comment updated');
       commentsPanel.show([...updated]);
     },
@@ -659,6 +776,21 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       removeComments(comments().map((c) => c.id), null);
     },
 
+    identify(user) {
+      identifiedUser = user && user.name ? { id: user.id, name: user.name.slice(0, 80) } : null;
+      commentsPanel.refresh(comments());
+    },
+
+    show() {
+      if (live) startFeedbackSession();
+      api.showToolbar();
+    },
+
+    hide() {
+      if (live) endFeedbackSession();
+      api.hideToolbar();
+    },
+
     dispose(): void {
       flushPendingWrite();
       doDeactivate(true);
@@ -680,6 +812,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       commentsPanel.dispose();
       commentPopover.dispose();
       copySheet.dispose();
+      coachMark.dispose();
+      outbox?.dispose();
       themeManager.dispose();
       disposeStyleBaseline();
       document.documentElement.style.removeProperty('--grabby-toast-bottom');
@@ -691,8 +825,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     keyboard.start();
   }
 
-  // Toolbar starts hidden — it appears when selection mode is first activated
+  // Locally the toolbar appears when selection mode is first used. A live
+  // feedback session shows it straight away, with first-visit tips.
   store.state.toolbar = { ...store.state.toolbar, visible: false };
+  if (live && merged.showToolbar) {
+    api.showToolbar();
+    coachMark.maybeShow();
+  }
 
   store.subscribe((state, key) => {
     if (key === 'options') {
@@ -715,8 +854,18 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     }
   });
 
-  if (merged.mcpWebhook) {
-    api.registerPlugin(createMcpWebhookPlugin(merged.webhookUrl));
+  if (merged.server) {
+    outbox = createOutbox({
+      server: merged.server,
+      projectKey: merged.projectKey,
+      getComment: (id) => comments().find((c) => c.id === id),
+      getScreenshot,
+      onState: (id, state) => setSync(id, state),
+    });
+  }
+
+  if (merged.webhookUrl) {
+    api.registerPlugin(createWebhookPlugin(merged.webhookUrl));
   }
 
   return api;

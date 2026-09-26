@@ -17,7 +17,7 @@ describe('Escape-to-deactivate', () => {
     api = createGrabInstance({
       devOnly: false,
       persistHistory: false,
-      mcpWebhook: false,
+      
     });
   });
 

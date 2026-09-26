@@ -22,7 +22,16 @@ export interface ToolbarRenderer {
   dispose(): void;
 }
 
-export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRenderer {
+export interface ToolbarOptions {
+  /** Show a text label on the comment button; for reviewers who don't know the icon. */
+  label?: string;
+  /** Tooltip for the close button. */
+  dismissLabel?: string;
+  /** Leave out the enable/disable switch (reviewers on a live site don't need it). */
+  hideEnable?: boolean;
+}
+
+export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: ToolbarOptions = {}): ToolbarRenderer {
   let container: HTMLDivElement | null = null;
   let leftGroup: HTMLDivElement | null = null;
   let buttons: Record<string, HTMLButtonElement> = {};
@@ -75,6 +84,13 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
         color: var(--grabby-accent, #2563eb);
       }
       #${TOOLBAR_ID} button { position: relative; }
+      #${TOOLBAR_ID} button.grabby-btn-labelled {
+        width: auto;
+        gap: 6px;
+        padding: 0 12px 0 10px;
+        font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--grabby-accent, #2563eb);
+      }
       #${TOOLBAR_ID} .grabby-badge {
         position: absolute;
         top: 1px;
@@ -148,13 +164,17 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
     container.setAttribute('aria-label', 'Grabby toolbar');
 
     buttons.selection = createButton('selection', ICON_GRAB, 'Comment on an element (Alt+G)', callbacks.onSelectionMode);
+    if (options.label) {
+      buttons.selection.classList.add('grabby-btn-labelled');
+      buttons.selection.append(document.createTextNode(options.label));
+    }
     buttons.history = createButton('history', ICON_HISTORY, 'Comments', callbacks.onHistory);
     badge = document.createElement('span');
     badge.className = 'grabby-badge';
     badge.hidden = true;
     buttons.history.appendChild(badge);
     buttons.enable = createButton('enable', ICON_POWER, 'Enable/Disable', callbacks.onEnableToggle);
-    buttons.dismiss = createButton('dismiss', ICON_DISMISS, 'Dismiss toolbar', callbacks.onDismiss);
+    buttons.dismiss = createButton('dismiss', ICON_DISMISS, options.dismissLabel ?? 'Dismiss toolbar', callbacks.onDismiss);
 
     const divider = document.createElement('span');
     divider.className = 'grabby-toolbar-divider';
@@ -166,7 +186,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks): ToolbarRende
     leftGroup.appendChild(divider);
 
     container.appendChild(leftGroup);
-    container.appendChild(buttons.enable);
+    if (!options.hideEnable) container.appendChild(buttons.enable);
     container.appendChild(buttons.dismiss);
 
     getUiRoot().appendChild(container);

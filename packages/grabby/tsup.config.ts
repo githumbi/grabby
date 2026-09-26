@@ -1,26 +1,43 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig([
-  // 1. Core: ESM + CJS + types
+  // 1. Core and the lazy live entry: ESM (code-split, so /live pulls the
+  //    core in as a separate chunk only when needed) + CJS + types
   {
-    entry: { 'core/index': 'src/core/index.ts' },
+    entry: { 'core/index': 'src/core/index.ts', 'live/index': 'src/live.ts' },
     format: ['esm', 'cjs'],
     dts: true,
     clean: true,
     sourcemap: true,
+    splitting: true,
     outDir: 'dist',
   },
-  // 2. Core IIFE: browser global
+  // 1b. DOM-free exporter for Node (used by the server)
   {
-    entry: { 'core/index': 'src/core/index.global.ts' },
+    entry: { 'export/index': 'src/export.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    clean: false,
+    sourcemap: true,
+    outDir: 'dist',
+  },
+  // 2. Script-tag builds: the full UI, and a ~1 KB loader for live sites
+  {
+    entry: { grabby: 'src/core/index.global.ts' },
     format: ['iife'],
-    globalName: 'Grabby',
     outDir: 'dist',
     clean: false,
     minify: true,
     // A script tag can't resolve bare imports, so the screenshot renderer
     // is bundled in (it's still only executed on first use).
     noExternal: ['modern-screenshot'],
+  },
+  {
+    entry: { loader: 'src/core/loader.global.ts' },
+    format: ['iife'],
+    outDir: 'dist',
+    clean: false,
+    minify: true,
   },
   // 3. Angular: ESM + types
   {

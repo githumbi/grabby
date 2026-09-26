@@ -4,6 +4,8 @@ export interface ExportEnv {
   /** Page origin shown in the header, e.g. "localhost:4200". */
   origin?: string;
   now?: Date;
+  /** Print each comment's id, so an agent can act on it (e.g. resolve it). */
+  showIds?: boolean;
 }
 
 /** Rough token count (≈4 characters per token), for the Copy dialog. */
@@ -48,6 +50,7 @@ function uniq<T>(values: T[]): T[] {
 interface Context {
   showAuthors: boolean;
   showRoutes: boolean;
+  showIds: boolean;
   level: DetailLevel;
 }
 
@@ -77,7 +80,8 @@ function compactLine(c: GrabbyComment, i: number, ctx: Context): string {
   const parts = [where, t.component, `<${t.tag}>`].filter(Boolean).join(' ');
   const who = ctx.showAuthors ? ` (${authorLabel(c.author)})` : '';
   const route = ctx.showRoutes ? ` [${c.page.route}]` : '';
-  return `${i}. ${parts}${route} — ${indent(c.comment, '   ')}${who}`;
+  const id = ctx.showIds ? ` [id ${c.id}]` : '';
+  return `${i}. ${parts}${route} — ${indent(c.comment, '   ')}${who}${id}`;
 }
 
 function detailBlock(c: GrabbyComment, i: number, ctx: Context, groupHasSource: boolean, headedComponent: string | null): string[] {
@@ -102,7 +106,8 @@ function detailBlock(c: GrabbyComment, i: number, ctx: Context, groupHasSource: 
   if (plain.length) b(plain.map(([k, v]) => `${k}: ${v}`).join(' · '));
   for (const [k, v] of Object.entries(t.facts)) if (STYLE_FACTS.has(k)) b(`${k}: ${v}`);
 
-  const parents = t.stack.slice(t.source ? 1 : 0);
+  // The first frame is the element's own component; it's already named above.
+  const parents = t.stack.filter((f, i) => !(i === 0 && (t.source || f.name === t.component)));
   if (parents.length) {
     b(`inside: ${parents.map((f) => (f.file ? `${f.name} (${location(f.file, f.line, full)})` : f.name)).join(' › ')}`);
   }
@@ -118,6 +123,7 @@ function detailBlock(c: GrabbyComment, i: number, ctx: Context, groupHasSource: 
   if (ctx.showAuthors) meta.push(`by ${authorLabel(c.author)}`);
   if (ctx.showRoutes) meta.push(`on ${c.page.route}`);
   if (meta.length) b(meta.join(' '));
+  if (ctx.showIds) b(`id: ${c.id}`);
   return lines;
 }
 
@@ -132,6 +138,7 @@ export function formatExport(comments: GrabbyComment[], level: DetailLevel = 'st
   const authors = uniq(ordered.map((c) => authorKey(c.author)));
   const ctx: Context = {
     level,
+    showIds: env.showIds === true,
     showAuthors: authors.length > 1 || ordered.some((c) => !c.author.anonymous && !!c.author.name),
     showRoutes: uniq(ordered.map((c) => c.page.route)).length > 1,
   };

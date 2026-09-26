@@ -60,6 +60,9 @@ export async function captureScreenshot(el: Element): Promise<Screenshot | null>
       quality: 0.8,
       filter: keepNode,
       onCloneEachNode: blurMasked,
+      // The renderer strips the root's margins, which lets the browser's
+      // default margin for h1/p/ul come back and shift the content down.
+      style: { margin: '0' },
       timeout: TIMEOUT_MS,
     });
     if (!blob) return null;

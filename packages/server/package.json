@@ -9,9 +9,9 @@
     "access": "public"
   },
   "bin": {
-    "grabby-server": "./dist/index.js"
+    "grabby-server": "./dist/cli.js"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/cli.js",
   "files": [
     "dist",
     "README.md"
@@ -19,15 +19,18 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^2",
+    "@githumbi/grabby": "workspace:^"
   },
   "repository": {
     "type": "git",
@@ -43,5 +46,8 @@
     "model-context-protocol",
     "ai",
     "developer-tools"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

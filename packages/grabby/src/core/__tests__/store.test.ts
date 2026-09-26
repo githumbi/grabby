@@ -12,8 +12,8 @@ function makeOptions(overrides: Partial<GrabbyOptions> = {}): GrabbyOptions {
     devOnly: true,
     showToolbar: true,
     themeMode: 'light',
-    mcpWebhook: false,
-    webhookUrl: 'http://localhost:3456/grab',
+    
+    mode: 'local',
     persistHistory: false,
     copyOnComment: false,
     detailLevel: 'standard',
