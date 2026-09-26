@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grabby · plain HTML example</title>
+    <style>
+      body { margin: 0; font-family: Georgia, serif; color: #1c1917; background: #fafaf9; }
+      .site-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 32px; border-bottom: 1px solid #e7e5e4; }
+      .site-header nav a { margin-left: 16px; color: #57534e; text-decoration: none; }
+      .article { max-width: 640px; margin: 40px auto; padding: 0 20px; line-height: 1.7; }
+      .article h1 { font-size: 38px; line-height: 1.2; }
+      .cta { background: #b45309; color: #fff; border: 0; padding: 12px 18px; border-radius: 6px; font-size: 16px; }
+      kbd { background: #e7e5e4; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header class="site-header" data-component="SiteHeader">
+      <strong>The Field Journal</strong>
+      <nav><a href="/">Home</a><a href="/archive">Archive</a><a href="/about">About</a></nav>
+    </header>
+    <article class="article" data-component="Article">
+      <h1>Notes from a slow week in the hills</h1>
+      <p>No framework here: Grabby is loaded with one script tag. Press <kbd>⌥G</kbd> / <kbd>Alt+G</kbd>, click any paragraph, and leave a comment.</p>
+      <p>Elements marked with <code>data-component</code> are named in the export; everything else is described by a unique selector.</p>
+      <img src="https://picsum.photos/seed/grabby/640/320" alt="" width="640" height="320" />
+      <p><button class="cta">Subscribe for weekly notes</button></p>
+    </article>
+
+    <!--
+      On a real site, load it from a CDN with a pinned version:
+      <script src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1/dist/grabby.global.js" defer></script>
+    -->
+    <script src="/node_modules/@githumbi/grabby/dist/grabby.global.js" defer></script>
+  </body>
+</html>

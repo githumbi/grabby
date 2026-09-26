@@ -15,7 +15,7 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@githumbi/angular-grab:application",
+          "builder": "@githumbi/grabby:application",
           "options": {
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
@@ -54,7 +54,7 @@
           "defaultConfiguration": "production"
         },
         "serve": {
-          "builder": "@githumbi/angular-grab:dev-server",
+          "builder": "@githumbi/grabby:dev-server",
           "configurations": {
             "production": {
               "buildTarget": "angular-19-app:build:production"

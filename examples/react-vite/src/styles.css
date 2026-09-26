@@ -1,0 +1,14 @@
+body { margin: 0; font-family: system-ui, sans-serif; color: #0f172a; background: #f8fafc; }
+.page { max-width: 960px; margin: 0 auto; padding: 40px 20px; }
+.hero { text-align: center; margin-bottom: 32px; }
+.hero h1 { font-size: 40px; margin: 0 0 8px; }
+kbd { background: #e2e8f0; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+.plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; }
+.card h2 { margin: 0; font-size: 18px; }
+.price { font-size: 32px; font-weight: 700; margin: 8px 0; }
+.price span { font-size: 14px; color: #64748b; font-weight: 400; }
+.card ul { padding-left: 18px; color: #475569; }
+.btn, .signup button { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; cursor: pointer; }
+.signup { margin-top: 32px; display: flex; gap: 8px; align-items: center; }
+.signup input { flex: 1; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }

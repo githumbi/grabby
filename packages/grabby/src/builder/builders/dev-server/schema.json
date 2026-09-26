@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "title": "Grabby Dev Server Builder",
+  "description": "Wraps @angular/build:dev-server with Grabby source injection. Declares the common dev-server options so `ng serve --port 4300` style flags work; anything else in angular.json passes through unchanged.",
+  "type": "object",
+  "properties": {
+    "buildTarget": { "type": "string", "description": "A build builder target to serve in the format of `project:target[:configuration]`." },
+    "port": { "type": "number", "default": 4200, "description": "Port to listen on." },
+    "host": { "type": "string", "default": "localhost", "description": "Host to listen on." },
+    "open": { "type": "boolean", "default": false, "alias": "o", "description": "Opens the url in default browser." },
+    "proxyConfig": { "type": "string", "description": "Proxy configuration file." },
+    "ssl": { "type": "boolean", "default": false, "description": "Serve using HTTPS." },
+    "sslKey": { "type": "string", "description": "SSL key to use for serving HTTPS." },
+    "sslCert": { "type": "string", "description": "SSL certificate to use for serving HTTPS." },
+    "allowedHosts": { "type": "array", "items": { "type": "string" }, "description": "Hosts that are allowed to access the dev server." },
+    "servePath": { "type": "string", "description": "The pathname where the application will be served." },
+    "liveReload": { "type": "boolean", "default": true, "description": "Whether to reload the page on change." },
+    "hmr": { "type": "boolean", "description": "Enable hot module replacement." },
+    "watch": { "type": "boolean", "default": true, "description": "Rebuild on change." },
+    "poll": { "type": "number", "description": "File watching poll interval in milliseconds." },
+    "verbose": { "type": "boolean", "description": "Adds more details to output logging." },
+    "prebundle": { "description": "Enable and control the Vite-based development server's prebundling capabilities." },
+    "inspect": { "description": "Activate debugging inspector." }
+  },
+  "additionalProperties": true
+}

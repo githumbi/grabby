@@ -5,7 +5,7 @@ import { Component } from '@angular/core';
   standalone: true,
   template: `
     <header class="header">
-      <h1 class="header-title">angular-grab Demo</h1>
+      <h1 class="header-title">grabby Demo</h1>
     </header>
   `,
   styles: [`

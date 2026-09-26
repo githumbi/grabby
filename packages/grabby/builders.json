@@ -1,0 +1,14 @@
+{
+  "builders": {
+    "application": {
+      "implementation": "./dist/builder/builders/application/index",
+      "schema": "./dist/builder/builders/application/schema.json",
+      "description": "Build an Angular application with grabby source injection"
+    },
+    "dev-server": {
+      "implementation": "./dist/builder/builders/dev-server/index",
+      "schema": "./dist/builder/builders/dev-server/schema.json",
+      "description": "Serve an Angular application with grabby source injection"
+    }
+  }
+}

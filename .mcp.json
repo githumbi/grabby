@@ -1,14 +1,9 @@
 {
   "mcpServers": {
-    "angular-grab": {
+    "grabby": {
       "type": "stdio",
-      "command": "cmd",
-      "args": [
-        "/c",
-        "npx",
-        "-y",
-        "@githumbi/angular-grab-mcp@latest"
-      ]
+      "command": "node",
+      "args": ["packages/server/dist/cli.js", "mcp"]
     }
   }
 }

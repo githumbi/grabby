@@ -1,0 +1,106 @@
+import { Z_INDEX_OVERLAY, Z_INDEX_LABEL } from '../constants';
+import { svgIcon } from '../ui/dom';
+import { ICON_CHECK_SMALL } from '../toolbar/toolbar-icons';
+import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
+
+const STYLE_ID = '__grabby-feedback-styles__';
+
+function injectStyles(): void {
+  if (hasStyles(STYLE_ID)) return;
+
+  addStyles(STYLE_ID, `
+    @keyframes grabby-flash {
+      0%   { opacity: 1; }
+      100% { opacity: 0; transform: scale(1.02); }
+    }
+    @keyframes grabby-pill-in {
+      0%   { opacity: 0; transform: translateY(4px) scale(0.9); }
+      30%  { opacity: 1; transform: translateY(0) scale(1); }
+      70%  { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-8px) scale(0.95); }
+    }
+    .grabby-select-flash {
+      position: fixed;
+      pointer-events: none;
+      z-index: ${Z_INDEX_OVERLAY};
+      border: 2px solid #22c55e;
+      background: rgba(34, 197, 94, 0.12);
+      border-radius: 3px;
+      box-sizing: border-box;
+      animation: grabby-flash 0.45s ease-out forwards;
+    }
+    .grabby-select-pill {
+      position: fixed;
+      pointer-events: none;
+      z-index: ${Z_INDEX_LABEL};
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #22c55e;
+      color: #fff;
+      font: 600 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 3px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      box-shadow: 0 2px 8px rgba(34, 197, 94, 0.35);
+      animation: grabby-pill-in 0.9s ease-out forwards;
+    }
+    .grabby-select-pill svg {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+    }
+  `);
+}
+
+export function showSelectFeedback(element: Element, label = 'Selected'): void {
+  injectStyles();
+
+  const rect = element.getBoundingClientRect();
+
+  // Green flash overlay on the element
+  const flash = document.createElement('div');
+  flash.className = 'grabby-select-flash';
+  flash.style.top = `${rect.top}px`;
+  flash.style.left = `${rect.left}px`;
+  flash.style.width = `${rect.width}px`;
+  flash.style.height = `${rect.height}px`;
+  getUiRoot().appendChild(flash);
+
+  // Confirmation pill above the element
+  const pill = document.createElement('div');
+  pill.className = 'grabby-select-pill';
+  pill.append(svgIcon(ICON_CHECK_SMALL), ` ${label}`);
+  getUiRoot().appendChild(pill);
+
+  // Position pill centered above the element (or below if no room)
+  const pillWidth = 70; // approximate
+  let pillLeft = rect.left + rect.width / 2 - pillWidth / 2;
+  let pillTop = rect.top - 24;
+  if (pillTop < 4) {
+    pillTop = rect.bottom + 6;
+  }
+  // Clamp to viewport
+  const vw = document.documentElement.clientWidth;
+  if (pillLeft + pillWidth > vw - 4) pillLeft = vw - pillWidth - 4;
+  if (pillLeft < 4) pillLeft = 4;
+
+  pill.style.top = `${pillTop}px`;
+  pill.style.left = `${pillLeft}px`;
+
+  // Clean up after animations complete
+  const cleanup = () => {
+    flash.remove();
+    pill.remove();
+  };
+  pill.addEventListener('animationend', cleanup);
+
+  // Safety fallback
+  setTimeout(cleanup, 1200);
+}
+
+export function disposeFeedbackStyles(): void {
+  removeStyles(STYLE_ID);
+}

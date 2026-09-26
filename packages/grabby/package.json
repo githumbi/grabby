@@ -1,0 +1,191 @@
+{
+  "name": "@githumbi/grabby",
+  "version": "0.1.0",
+  "description": "Point at any UI element, leave a comment, and hand the feedback to an AI coding agent. Works with React, Angular, Vue, Svelte and plain HTML.",
+  "keywords": [
+    "grabby",
+    "feedback",
+    "ui-feedback",
+    "annotation",
+    "ai",
+    "coding-agent",
+    "claude",
+    "developer-tools",
+    "react",
+    "angular",
+    "vue",
+    "svelte",
+    "vite",
+    "webpack",
+    "esbuild"
+  ],
+  "author": "Githumbi <githumbi74@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/githumbi/grabby",
+  "bugs": "https://github.com/githumbi/grabby/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/githumbi/grabby.git",
+    "directory": "packages/grabby"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/core/index.cjs",
+  "module": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "unpkg": "./dist/grabby.global.js",
+  "jsdelivr": "./dist/grabby.global.js",
+  "sideEffects": [
+    "./dist/grabby.global.js",
+    "./dist/loader.global.js"
+  ],
+  "bin": {
+    "grabby": "./dist/cli/index.js"
+  },
+  "builders": "./builders.json",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/core/index.d.ts",
+        "default": "./dist/core/index.js"
+      },
+      "require": {
+        "types": "./dist/core/index.d.cts",
+        "default": "./dist/core/index.cjs"
+      }
+    },
+    "./live": {
+      "import": {
+        "types": "./dist/live/index.d.ts",
+        "default": "./dist/live/index.js"
+      },
+      "require": {
+        "types": "./dist/live/index.d.cts",
+        "default": "./dist/live/index.cjs"
+      }
+    },
+    "./export": {
+      "import": {
+        "types": "./dist/export/index.d.ts",
+        "default": "./dist/export/index.js"
+      },
+      "require": {
+        "types": "./dist/export/index.d.cts",
+        "default": "./dist/export/index.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin/index.d.ts",
+        "default": "./dist/plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/plugin/index.d.cts",
+        "default": "./dist/plugin/index.cjs"
+      }
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./angular": {
+      "types": "./dist/angular/index.d.ts",
+      "import": "./dist/angular/index.js"
+    },
+    "./angular/esbuild": {
+      "import": {
+        "types": "./dist/esbuild-plugin/index.d.ts",
+        "default": "./dist/esbuild-plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/esbuild-plugin/index.d.cts",
+        "default": "./dist/esbuild-plugin/index.cjs"
+      }
+    },
+    "./babel": {
+      "import": {
+        "types": "./dist/babel-plugin/index.d.ts",
+        "default": "./dist/babel-plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/babel-plugin/index.d.cts",
+        "default": "./dist/babel-plugin/index.cjs"
+      }
+    },
+    "./global": "./dist/grabby.global.js",
+    "./loader": "./dist/loader.global.js",
+    "./builder": {
+      "require": "./dist/builder/index.js"
+    },
+    "./dist/builder/builders/application/index": "./dist/builder/builders/application/index.js",
+    "./dist/builder/builders/dev-server/index": "./dist/builder/builders/dev-server/index.js",
+    "./builders.json": "./builders.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "builders.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "prebuild": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.copyFileSync('../../README.md','README.md');fs.copyFileSync('../../LICENSE','LICENSE')\"",
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'),p=require('path');['application','dev-server'].forEach(b=>{const d=p.join('dist','builder','builders',b);fs.mkdirSync(d,{recursive:true});fs.copyFileSync(p.join('src','builder','builders',b,'schema.json'),p.join(d,'schema.json'))});fs.writeFileSync(p.join('dist','builder','package.json'),'{\\\"type\\\":\\\"commonjs\\\"}')\"",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "clean": "node -e \"const fs=require('fs');['dist','README.md'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch{}})\""
+  },
+  "dependencies": {
+    "@babel/core": "^7.29.7",
+    "modern-screenshot": "^4.7.0",
+    "unplugin": "^2.3.11"
+  },
+  "peerDependencies": {
+    "@angular-devkit/architect": ">=0.1800.0",
+    "@angular/build": ">=18.0.0",
+    "@angular/core": ">=19.0.0",
+    "esbuild": ">=0.17.0",
+    "typescript": ">=5.0.0",
+    "vue": ">=3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
+    "@angular/build": {
+      "optional": true
+    },
+    "@angular-devkit/architect": {
+      "optional": true
+    },
+    "esbuild": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@angular-devkit/architect": "^0.2102.24",
+    "@angular/build": "^21.2.24",
+    "@angular/core": "^21.2.24",
+    "@types/babel__core": "^7.20.5",
+    "esbuild": "^0.28.1",
+    "jsdom": "^26.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9",
+    "vue": "^3.5.43"
+  }
+}
