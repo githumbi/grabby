@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { SOURCE_ATTRIBUTE } from '../react/resolvers/source-resolver';
+import { SOURCE_ATTRIBUTE } from '../core/adapters/stamp';
 
 export interface GrabbyBabelOptions {
   /** Paths are stamped relative to this. Default: process.cwd() */

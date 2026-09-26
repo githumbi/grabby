@@ -1,16 +1,14 @@
 import { init, createNoopApi } from '../core';
 import type { GrabbyAPI, GrabbyOptions, Plugin } from '../core';
-import { resolveComponent } from './resolvers/component-resolver';
-import { resolveSource } from './resolvers/source-resolver';
 
 declare const ngDevMode: boolean | undefined;
 
 let instance: GrabbyAPI | null = null;
 
 /**
- * Initialize grabby. Registers Angular-specific component and source
- * resolvers, then returns the API handle. Idempotent — subsequent calls
- * return the same instance.
+ * Initialize Grabby. The Angular adapter is one of the defaults, so this only
+ * adds a singleton on top of `init`. Idempotent: later calls return the same
+ * instance.
  */
 export function initGrabby(options?: Partial<GrabbyOptions>): GrabbyAPI {
   if (instance) return instance;
@@ -22,8 +20,6 @@ export function initGrabby(options?: Partial<GrabbyOptions>): GrabbyAPI {
   }
 
   instance = init(options);
-  instance.setComponentResolver((el) => resolveComponent(el));
-  instance.setSourceResolver((el) => resolveSource(el));
 
   return instance;
 }

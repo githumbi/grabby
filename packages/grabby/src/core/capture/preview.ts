@@ -28,7 +28,7 @@ export function isNoiseAttr(name: string): boolean {
 }
 
 export function isNoiseClass(name: string): boolean {
-  return name.startsWith('ng-') || name.startsWith('_ng') || /^svelte-[a-z0-9]+$/.test(name);
+  return name.startsWith('ng-') || name.startsWith('_ng') || /^svelte-[a-z0-9]+$/i.test(name) || /^s-[A-Za-z0-9_-]{8,}$/.test(name);
 }
 
 export function truncate(text: string, max: number): string {
@@ -70,8 +70,7 @@ function attrValue(el: Element, name: string, value: string, cleanClasses: (list
     return truncate(classes.join(' '), MAX_CLASS_CHARS);
   }
   if (URL_ATTRS.has(name)) return truncate(sanitizeUrl(value), 120);
-  if (name === 'type' && el.tagName === 'INPUT' && value === 'password') return value;
-  return truncate(redact(value), MAX_ATTR_CHARS);
+  return truncate(redact(value, { keepEmails: name === 'placeholder' }), MAX_ATTR_CHARS);
 }
 
 export function openingTag(el: Element, cleanClasses: (list: string[]) => string[] = (l) => l.filter((c) => !isNoiseClass(c))): string {

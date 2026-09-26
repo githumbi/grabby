@@ -1,28 +1,21 @@
 import { init } from '../core';
 import type { GrabbyOptions, GrabbyAPI } from '../core';
-import { resolveComponent } from './resolvers/component-resolver';
-import { resolveSource } from './resolvers/source-resolver';
 
-export { resolveComponent } from './resolvers/component-resolver';
-export { resolveSource, SOURCE_ATTRIBUTE } from './resolvers/source-resolver';
-export { getFiber, getComponentName, findHostElement } from './fiber';
-export type { FiberNode } from './fiber';
+export { reactAdapter, SOURCE_ATTRIBUTE } from '../core';
+export { resolveComponent } from '../core/adapters/react/component-resolver';
+export { resolveSource } from '../core/adapters/stamp';
+export { getFiber, getComponentName, findHostElement } from '../core/adapters/react/fiber';
+export type { FiberNode } from '../core/adapters/react/fiber';
 
 /**
- * Starts grabby against a React tree.
+ * Starts Grabby in a React app. Component names come from the React fiber;
+ * file:line comes from the stamps `@githumbi/grabby/plugin` adds at build time.
  *
- * Component names come from the React fiber; file paths come from the
- * `data-grabby-loc` stamps the babel plugin adds, so pair this with
- * `grabbyBabelPlugin()` in your bundler config.
- *
- * `devOnly` (default true) keys off `process.env.NODE_ENV`, which every
- * React bundler replaces, so production builds get a no-op API.
+ * Same as `initGrabby` from the package root, which detects React on its own;
+ * kept so existing `@githumbi/grabby/react` imports keep working.
  */
 export function initGrabby(options?: Partial<GrabbyOptions>): GrabbyAPI {
-  const api = init(options);
-  api.setComponentResolver(resolveComponent);
-  api.setSourceResolver(resolveSource);
-  return api;
+  return init(options);
 }
 
 export type { GrabbyOptions, GrabbyAPI };

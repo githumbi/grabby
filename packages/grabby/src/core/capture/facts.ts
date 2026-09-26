@@ -65,7 +65,7 @@ function actionFacts(el: Element): Facts {
 function fieldLabel(el: Element): string {
   const labels = (el as HTMLInputElement).labels;
   if (labels && labels.length > 0) return textOf(labels[0], 60);
-  return accessibleLabel(el) || redact(el.getAttribute('placeholder') ?? '');
+  return accessibleLabel(el) || redact(el.getAttribute('placeholder') ?? '', { keepEmails: true });
 }
 
 /** Form fields: what the field is, never what's typed in it. */
@@ -74,7 +74,7 @@ function fieldFacts(el: Element): Facts {
   put(f, 'label', fieldLabel(el));
   const type = el.tagName === 'INPUT' ? ((el as HTMLInputElement).type || 'text') : el.tagName.toLowerCase();
   put(f, 'type', type);
-  put(f, 'placeholder', redact(el.getAttribute('placeholder') ?? ''));
+  put(f, 'placeholder', redact(el.getAttribute('placeholder') ?? '', { keepEmails: true }));
   const flags: string[] = [];
   if ((el as HTMLInputElement).required || el.getAttribute('aria-required') === 'true') flags.push('required');
   if ((el as HTMLInputElement).disabled) flags.push('disabled');

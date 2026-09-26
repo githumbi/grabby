@@ -1,6 +1,7 @@
 // Resolvers
-export { resolveComponent } from './resolvers/component-resolver';
-export { resolveSource } from './resolvers/source-resolver';
+export { resolveComponent } from '../core/adapters/angular/component-resolver';
+export { resolveSource } from '../core/adapters/angular/source-resolver';
+export { angularAdapter } from '../core';
 
 // Angular integration
 export {

@@ -42,25 +42,16 @@ export default defineConfig([
     outDir: 'dist',
     external: ['esbuild', 'typescript'],
   },
-  // 5. Vite plugin: ESM + types
+  // 5. Build plugin (unplugin): ESM + CJS + types
   {
-    entry: { 'vite-plugin/index': 'src/vite-plugin/index.ts' },
-    format: ['esm'],
+    entry: { 'plugin/index': 'src/plugin/index.ts' },
+    format: ['esm', 'cjs'],
     dts: true,
     clean: false,
     sourcemap: true,
     outDir: 'dist',
-    external: ['vite'],
-  },
-  // 5a. React Vite plugin (JSX source stamping): ESM + types
-  {
-    entry: { 'vite-plugin/react': 'src/vite-plugin/react.ts' },
-    format: ['esm'],
-    dts: true,
-    clean: false,
-    sourcemap: true,
-    outDir: 'dist',
-    external: ['vite', '@babel/core'],
+    shims: true,
+    external: ['@babel/core', 'vue', 'vue/compiler-sfc', 'unplugin'],
   },
   // 5b. React: ESM + types
   {
@@ -80,20 +71,6 @@ export default defineConfig([
     sourcemap: true,
     outDir: 'dist',
     external: ['@babel/core'],
-  },
-  // 6. Webpack plugin + loader: ESM + CJS + types
-  {
-    entry: {
-      'webpack-plugin/index': 'src/webpack-plugin/index.ts',
-      'webpack-plugin/loader': 'src/webpack-plugin/loader.ts',
-    },
-    format: ['esm', 'cjs'],
-    dts: true,
-    clean: false,
-    sourcemap: true,
-    outDir: 'dist',
-    shims: true,
-    external: ['webpack'],
   },
   // 7. Builder: CJS only (Angular CLI requirement)
   // Angular CLI uses require() to load builders. Since the root package is

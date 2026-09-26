@@ -34,6 +34,8 @@ import { formatExport } from './capture/export';
 import { sanitizeRoute } from './capture/redact';
 import { disposeStyleBaseline } from './capture/styles';
 import { randomId, currentAuthor, loadIdentity } from './identity/session';
+import { composeAdapters, DEFAULT_ADAPTERS } from './adapters';
+import { isNoiseClass } from './capture/preview';
 
 const MAX_COMMENTS = 200;
 const LEVEL_KEY = 'grabby:v1:level';
@@ -82,15 +84,6 @@ export function isDevMode(): boolean {
     if (process.env.NODE_ENV === 'production') return false;
   } catch { /* no process shim in this bundle */ }
   return true;
-}
-
-/** Placeholder until framework adapters report their own name. */
-function detectFramework(): string {
-  try {
-    if ((window as unknown as { ng?: unknown }).ng) return 'Angular';
-    if (document.querySelector('[data-grabby-loc]')) return 'React';
-  } catch { /* ignore */ }
-  return 'HTML';
 }
 
 function loadLevel(fallback: DetailLevel): DetailLevel {
@@ -154,9 +147,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   const pluginRegistry = createPluginRegistry();
   const themeManager = createThemeManager();
 
-  let componentResolver: ComponentResolver | null = null;
-  let sourceResolver: SourceResolver | null = null;
-  const framework: string | null = null;
+  // Adapters are tried per element, so a late-mounting app or a page mixing
+  // frameworks still resolves. Explicit resolvers (setComponentResolver)
+  // replace them.
+  const adapters = composeAdapters(merged.adapters ?? DEFAULT_ADAPTERS);
+  let componentResolver: ComponentResolver | null = adapters.resolveComponent;
+  let sourceResolver: SourceResolver | null = adapters.resolveSource;
+  const cleanClasses = (list: string[]) => adapters.cleanClasses(list.filter((c) => !isNoiseClass(c)));
 
   // The element being commented on and its screenshot, captured the moment
   // it was clicked, before anything on the page can change.
@@ -209,9 +206,9 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         title: document.title,
         viewport: [window.innerWidth, window.innerHeight],
       },
-      target: captureTarget(element, { componentResolver, sourceResolver }),
+      target: captureTarget(element, { componentResolver, sourceResolver, cleanClasses }),
       screenshot: null,
-      framework: framework ?? detectFramework(),
+      framework: adapters.frameworkFor(element),
     };
 
     setComments([comment, ...comments()].slice(0, MAX_COMMENTS));

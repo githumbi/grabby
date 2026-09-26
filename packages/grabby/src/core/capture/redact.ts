@@ -13,13 +13,21 @@ const LONG_NUMBER = /\b\d(?:[ -]?\d){8,}\b/g;
 const OPAQUE_TOKEN = /\b[A-Za-z0-9_-]{32,}\b/g;
 const SENSITIVE_PARAM = /([?&#](?:access_token|id_token|token|key|api_key|apikey|secret|password|pass|auth|code|session|sig|signature)=)[^&#\s]*/gi;
 
-export function redact(text: string): string {
+export interface RedactOptions {
+  /**
+   * Keep email addresses. Only for developer-written strings such as
+   * placeholders ("you@company.com"), never for page content.
+   */
+  keepEmails?: boolean;
+}
+
+export function redact(text: string, options: RedactOptions = {}): string {
   if (!text) return text;
-  return text
+  const scrubbed = text
     .replace(SENSITIVE_PARAM, '$1[redacted]')
     .replace(JWT, '[token]')
-    .replace(BEARER, '$1 [token]')
-    .replace(EMAIL, '[email]')
+    .replace(BEARER, '$1 [token]');
+  return (options.keepEmails ? scrubbed : scrubbed.replace(EMAIL, '[email]'))
     .replace(LONG_NUMBER, '[number]')
     .replace(OPAQUE_TOKEN, (m) => (/\d/.test(m) && /[A-Za-z]/.test(m) ? '[token]' : m));
 }

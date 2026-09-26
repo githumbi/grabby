@@ -23,7 +23,9 @@ function resolveStack(el: Element, deps: CaptureDeps): { component: string | nul
   const frames: StackFrame[] = [];
   const named: StackFrame[] = [];
   for (const entry of comp?.stack ?? []) {
-    const src = entry.hostElement && deps.sourceResolver ? deps.sourceResolver(entry.hostElement) : null;
+    const src = entry.filePath !== undefined
+      ? { filePath: entry.filePath, line: entry.line ?? null }
+      : entry.hostElement && deps.sourceResolver ? deps.sourceResolver(entry.hostElement) : null;
     const frame: StackFrame = { name: entry.name, file: src?.filePath ?? null, line: src?.line ?? null };
     named.push(frame);
     if (isAppFile(frame.file) && frames.length < MAX_STACK) frames.push(frame);

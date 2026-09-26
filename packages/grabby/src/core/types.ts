@@ -1,3 +1,5 @@
+import type { FrameworkAdapter } from './adapters/types';
+
 export type ThemeMode = 'light';
 
 /** What kind of UI the comment is about; decides which facts get captured. */
@@ -117,6 +119,11 @@ export interface GrabbyOptions {
   /** Query parameters worth keeping in the recorded route, e.g. ['tab']. Default: [] */
   captureQueryParams: string[];
   /**
+   * Framework adapters to try, in order. Default: every built-in adapter
+   * (Angular, React, Vue, Svelte, then plain HTML), detected per element.
+   */
+  adapters?: FrameworkAdapter[];
+  /**
    * CSP nonce for Grabby's `<style>` elements. Only used in browsers without
    * constructable stylesheets; elsewhere styles need no CSP allowance.
    */
@@ -188,7 +195,11 @@ export type PluginCleanup = () => void;
 export type ComponentResolver = (element: Element) => {
   name: string | null;
   hostElement: Element | null;
-  stack?: Array<{ name: string; hostElement: Element | null }>;
+  /**
+   * Owning components, innermost first. An entry can carry its own location
+   * when the framework knows it; otherwise it's resolved from `hostElement`.
+   */
+  stack?: Array<{ name: string; hostElement: Element | null; filePath?: string | null; line?: number | null }>;
 } | null;
 
 export type SourceResolver = (element: Element) => {

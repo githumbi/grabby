@@ -24,11 +24,13 @@ function baselineDoc(): Document | null {
   }
 }
 
-function baselineFor(tag: string, props: string[]): Map<string, string> {
-  let cached = baselineCache.get(tag);
+function baselineFor(tag: string, type: string | null, props: string[]): Map<string, string> {
+  // An <input type="checkbox"> has very different defaults from a text input.
+  const key = type ? `${tag}[${type}]` : tag;
+  let cached = baselineCache.get(key);
   if (!cached) {
     cached = new Map();
-    baselineCache.set(tag, cached);
+    baselineCache.set(key, cached);
   }
   const missing = props.filter((p) => !cached!.has(p));
   if (missing.length > 0) {
@@ -36,6 +38,7 @@ function baselineFor(tag: string, props: string[]): Map<string, string> {
     const view = doc?.defaultView;
     if (doc?.body && view) {
       const probe = doc.createElement(tag);
+      if (type) probe.setAttribute('type', type);
       doc.body.appendChild(probe);
       const cs = view.getComputedStyle(probe);
       for (const p of missing) cached.set(p, cs.getPropertyValue(p));
@@ -94,7 +97,9 @@ export function customStyles(el: Element, props: string[]): Record<string, strin
   } catch {
     return out;
   }
-  const base = baselineFor(el.tagName.toLowerCase(), props);
+  const tag = el.tagName.toLowerCase();
+  const type = tag === 'input' || tag === 'button' ? el.getAttribute('type') : null;
+  const base = baselineFor(tag, type, props);
   for (const prop of props) {
     const value = cs.getPropertyValue(prop);
     if (!value || value === base.get(prop)) continue;
