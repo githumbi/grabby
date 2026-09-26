@@ -31,8 +31,8 @@
   "devDependencies": {
     "@githumbi/grabby": "workspace:^",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   },
   "repository": {
     "type": "git",
