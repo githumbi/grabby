@@ -177,6 +177,8 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks, options: 
     const localId = comment.screenshot?.localId;
     if (!localId) return null;
     const img = h('img', { class: 'grabby-thumb', alt: '', loading: 'lazy' });
+    // A page whose img-src CSP forbids blob: URLs gets no thumbnail, not a broken one.
+    img.addEventListener('error', () => img.remove(), { once: true });
     getScreenshot(localId).then((blob) => {
       if (!blob || typeof URL.createObjectURL !== 'function') { img.remove(); return; }
       const url = URL.createObjectURL(blob);

@@ -1,168 +1,112 @@
 # @githumbi/grabby-server
 
-> MCP server for grabby — query grabbed elements from AI coding agents
+The collector for [Grabby](../../README.md): it receives UI comments from your site, stores them with their screenshots, and hands them to you and your AI agent through `pull` and MCP.
 
-<!-- Demo GIF placeholder: record a short screen capture showing a grab in the browser followed by an AI agent query returning the result, then replace this comment with: ![Demo: grabbing an element in the browser and querying it from an AI agent](./demo.gif) -->
+- One small Node process. No database, no native dependencies: comments live in a JSON file, screenshots next to it.
+- Local by default. `--public` for a deployed site, and it won't start that way without keys and an origin allowlist.
 
-This MCP (Model Context Protocol) server lets AI coding agents like Claude Code, Cursor, and Windsurf access your grabby history. It runs a single process that provides both:
-
-- **MCP tools** over stdio for AI agent queries
-- **HTTP webhook** on port 3456 to receive grabs from the browser
-
-## Quick setup
-
-Run this in your project root:
+## Commands
 
 ```bash
-npx @githumbi/grabby add mcp
+npx @githumbi/grabby-server init      # create config with a project key + admin token
+npx @githumbi/grabby-server start     # run the collector (localhost:3456)
+npx @githumbi/grabby-server mcp       # MCP server for Claude Code, Cursor, …
+npx @githumbi/grabby-server pull      # print open comments, save screenshots, resolve them
 ```
 
-This writes the MCP server entry to `.mcp.json` in your project root — the standard config file that Claude Code, Cursor, Windsurf, and other MCP-compatible editors all read automatically. Commit this file so your teammates get the same setup.
+Run `--help` for all options.
 
-Then **restart your editor** to activate the MCP connection.
+## Local development
 
-## Manual setup
+`npx grabby add mcp` in your project writes an `.mcp.json` entry that runs `grabby-server mcp`. That one process is both the MCP server and a collector on `http://localhost:3456`. Point Grabby at it:
 
-### Project-scoped (recommended)
-
-Add to `.mcp.json` in your project root. This works in Claude Code, Cursor, Windsurf, and any editor that supports the MCP standard:
-
-```json
-{
-  "mcpServers": {
-    "grabby": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@githumbi/grabby-server@latest"]
-    }
-  }
-}
+```ts
+initGrabby({ server: 'http://localhost:3456' });
 ```
 
-### Claude Code — global (all projects)
+Locally there are no keys: it only listens on 127.0.0.1, only accepts pages served from localhost, `*.localhost` or `*.test`, and rejects requests whose Host header isn't local (DNS rebinding).
 
-To register it globally instead of per-project, use the Claude Code CLI:
+## Deploying for a live site
 
-```bash
-claude mcp add grabby -- npx -y @githumbi/grabby-server@latest
-```
+1. Create keys, listing the sites allowed to send comments:
 
-This adds the server to your user-level Claude config rather than `.mcp.json`, so it's available in every project without needing the file.
+   ```bash
+   npx @githumbi/grabby-server init --origin https://your-site.com --origin https://staging.your-site.com
+   ```
 
-### Docker
+   This prints a **project key** (`pk_…`, public, goes in your site) and an **admin token** (`sk_…`, secret). The config is saved to `~/.grabby/config.json` with owner-only permissions.
 
-If you prefer to run the server in a container rather than via npx, add this to `.mcp.json`:
+2. Run it somewhere with a persistent disk, behind HTTPS.
 
-```json
-{
-  "mcpServers": {
-    "grabby": {
-      "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run", "--rm", "-i",
-        "-p", "3456:3456",
-        "-v", "grabby-history:/data",
-        "ghcr.io/githumbi/grabby-server:latest"
-      ]
-    }
-  }
-}
-```
+   **Docker** (build from this folder after `pnpm build`):
 
-The `-v grabby-history:/data` flag uses a named Docker volume so history persists across container restarts without needing a host path. Create it once before first use:
+   ```bash
+   docker run -d -p 3456:3456 -v grabby-data:/data \
+     -e GRABBY_PUBLIC_KEY=pk_… -e GRABBY_ADMIN_TOKEN=sk_… \
+     -e GRABBY_ALLOWED_ORIGINS=https://your-site.com \
+     grabby-server
+   ```
 
-```bash
-docker volume create grabby-history
-```
+   **Fly.io / Render / Railway**: use the Dockerfile, mount a volume at `/data`, and set the three variables above as secrets. Put it on its own subdomain (`feedback.your-site.com`) with TLS terminated by the platform.
 
-> **Note:** Only use one entry (`grabby` or `grabby-docker`) at a time. If both are registered, only one will bind port 3456 — the other will log a warning and continue serving MCP tools without receiving new grabs.
+   **Any Node 20+ host**:
 
-### Claude Desktop
+   ```bash
+   GRABBY_PUBLIC_KEY=pk_… GRABBY_ADMIN_TOKEN=sk_… GRABBY_ALLOWED_ORIGINS=https://your-site.com \
+     npx @githumbi/grabby-server start --public
+   ```
 
-Add to your Claude Desktop config:
+3. Add Grabby to your site with `mode: 'live'`, the server URL and the project key (see the main README), and share `https://your-site.com/?grabby=pk_…`.
 
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+4. Pull feedback:
 
-```json
-{
-  "mcpServers": {
-    "grabby": {
-      "command": "npx",
-      "args": ["-y", "@githumbi/grabby-server@latest"]
-    }
-  }
-}
-```
+   ```bash
+   npx @githumbi/grabby-server pull --server https://feedback.your-site.com --token sk_…
+   ```
 
-### Environment variables
+   Or give your agent the deployed collector over MCP:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GRABBY_HISTORY_PATH` | Path to the history file | `~/.grabby/history.json` |
-| `GRABBY_PORT` | Webhook listener port | `3456` |
+   ```json
+   { "mcpServers": { "grabby": { "command": "npx", "args": ["-y", "@githumbi/grabby-server@0", "mcp", "--server", "https://feedback.your-site.com"], "env": { "GRABBY_ADMIN_TOKEN": "sk_…" } } }
+   ```
 
-## How it works
+## Configuration
 
-```
-Browser (grabby)
-  → built-in webhook plugin POSTs to http://localhost:3456/grab
-  → saved to ~/.grabby/history.json
+Settings come from the config file, overridden by environment variables:
 
-AI agent (Claude, Cursor, etc.)
-  → MCP tool call over stdio
-  → reads ~/.grabby/history.json
-  → returns results
-```
+| Variable | |
+|---|---|
+| `GRABBY_PUBLIC` | `1` to accept comments from other machines |
+| `GRABBY_PUBLIC_KEY` | project key sites use to send comments |
+| `GRABBY_ADMIN_TOKEN` | secret for reading, resolving, deleting |
+| `GRABBY_ALLOWED_ORIGINS` | comma-separated sites allowed to send comments |
+| `GRABBY_HOST`, `GRABBY_PORT` | default `127.0.0.1` (`0.0.0.0` when public), `3456` |
+| `GRABBY_DATA_DIR` | default `~/.grabby` (`/data` in Docker) |
+| `GRABBY_SERVER` | default collector for `pull` and `mcp` |
 
-The webhook plugin is built into `@githumbi/grabby` and auto-registers when your app starts. No manual plugin setup needed. If the MCP server isn't running, the POST silently fails and copying still works normally.
+## HTTP API
 
-Both the MCP tools and webhook run inside the same server process. The MCP tools work even if port 3456 is already in use (e.g. multiple editor windows open) — only the webhook listener is affected.
+Versioned, so a dashboard can be built on it.
 
-To disable the webhook plugin, pass `mcpWebhook: false` to `provideGrabby()`.
+| | Auth | |
+|---|---|---|
+| `POST /v1/comments` | project key + allowed origin | add or update (same browser session) a comment |
+| `PUT /v1/comments/:id/screenshot` | project key + the comment's session | WebP, PNG or JPEG, 2 MB max |
+| `GET /v1/comments?status=open\|resolved\|all&author=&route=&since=` | admin token | list |
+| `GET /v1/comments/:id` | admin token | one comment |
+| `PATCH /v1/comments/:id` `{ "status": "resolved" }` | admin token | resolve or reopen |
+| `DELETE /v1/comments/:id` | admin token | delete |
+| `POST /v1/comments/bulk` `{ "ids": [], "action": "resolve"\|"reopen"\|"delete" }` | admin token | bulk |
+| `GET /v1/screenshots/:id` | admin token | the image |
+| `GET /v1/export?level=standard&status=open` | admin token | the Copy all markdown |
+| `GET /health` | none | liveness |
 
-## MCP tools
+The project key goes in `X-Grabby-Key`, the admin token in `Authorization: Bearer`. Limits: 60 comment writes per minute per IP (30 per browser session), 20 screenshots per minute per IP, 64 KB per comment.
 
-### `grabby_search`
+## Security
 
-Search grab history by text, component name, or file path.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string | Search term — matches HTML, component name, file path, selector |
-| `componentName` | string | Filter by component name (partial match) |
-| `filePath` | string | Filter by file path (partial match) |
-| `limit` | number | Max results (default: 10) |
-
-### `grabby_recent`
-
-Get the most recently grabbed elements.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `limit` | number | Number of results (default: 5) |
-
-### `grabby_get`
-
-Get a single grab entry by ID.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | The grab entry ID |
-
-### `grabby_stats`
-
-Summary of your grab history: total count, unique components, unique files, and activity in the last 24h / 7d.
-
-## Example usage
-
-Once configured, you can ask your AI agent things like:
-
-- "Show me the last 5 elements I grabbed"
-- "Search my grabby history for button components"
-- "What components have I grabbed from the auth module?"
-
-## License
-
-MIT
+- Every field is validated and capped; unknown fields are dropped and records are rebuilt, never stored as received.
+- Screenshots are identified by their bytes, served with `nosniff` and a `default-src 'none'` CSP.
+- Only the browser session that created a comment can update it or attach its screenshot.
+- Admin tokens are compared in constant time. Keep the admin token out of your site and your repository.
+- Comment text reaches your AI agent. MCP results label it as untrusted user input; treat it that way.

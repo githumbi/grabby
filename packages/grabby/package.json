@@ -2,79 +2,140 @@
   "name": "@githumbi/grabby",
   "version": "0.1.0",
   "description": "Point at any UI element, leave a comment, and hand the feedback to an AI coding agent. Works with React, Angular, Vue, Svelte and plain HTML.",
+  "keywords": [
+    "grabby",
+    "feedback",
+    "ui-feedback",
+    "annotation",
+    "ai",
+    "coding-agent",
+    "claude",
+    "developer-tools",
+    "react",
+    "angular",
+    "vue",
+    "svelte",
+    "vite",
+    "webpack",
+    "esbuild"
+  ],
   "author": "Githumbi <githumbi74@gmail.com>",
   "license": "MIT",
+  "homepage": "https://github.com/githumbi/grabby",
+  "bugs": "https://github.com/githumbi/grabby/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/githumbi/grabby.git",
+    "directory": "packages/grabby"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
   "main": "./dist/core/index.cjs",
   "module": "./dist/core/index.js",
   "types": "./dist/core/index.d.ts",
+  "unpkg": "./dist/grabby.global.js",
+  "jsdelivr": "./dist/grabby.global.js",
+  "sideEffects": [
+    "./dist/grabby.global.js",
+    "./dist/loader.global.js"
+  ],
   "bin": {
     "grabby": "./dist/cli/index.js"
   },
   "builders": "./builders.json",
   "exports": {
     ".": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js",
-      "require": "./dist/core/index.cjs"
-    },
-    "./global": {
-      "default": "./dist/grabby.global.js"
-    },
-    "./loader": {
-      "default": "./dist/loader.global.js"
+      "import": {
+        "types": "./dist/core/index.d.ts",
+        "default": "./dist/core/index.js"
+      },
+      "require": {
+        "types": "./dist/core/index.d.cts",
+        "default": "./dist/core/index.cjs"
+      }
     },
     "./live": {
-      "types": "./dist/live/index.d.ts",
-      "import": "./dist/live/index.js",
-      "require": "./dist/live/index.cjs"
+      "import": {
+        "types": "./dist/live/index.d.ts",
+        "default": "./dist/live/index.js"
+      },
+      "require": {
+        "types": "./dist/live/index.d.cts",
+        "default": "./dist/live/index.cjs"
+      }
     },
     "./export": {
-      "types": "./dist/export/index.d.ts",
-      "import": "./dist/export/index.js",
-      "require": "./dist/export/index.cjs"
+      "import": {
+        "types": "./dist/export/index.d.ts",
+        "default": "./dist/export/index.js"
+      },
+      "require": {
+        "types": "./dist/export/index.d.cts",
+        "default": "./dist/export/index.cjs"
+      }
     },
-    "./angular": {
-      "types": "./dist/angular/index.d.ts",
-      "import": "./dist/angular/index.js"
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin/index.d.ts",
+        "default": "./dist/plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/plugin/index.d.cts",
+        "default": "./dist/plugin/index.cjs"
+      }
     },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
     },
-    "./plugin": {
-      "types": "./dist/plugin/index.d.ts",
-      "import": "./dist/plugin/index.js",
-      "require": "./dist/plugin/index.cjs"
+    "./angular": {
+      "types": "./dist/angular/index.d.ts",
+      "import": "./dist/angular/index.js"
+    },
+    "./angular/esbuild": {
+      "import": {
+        "types": "./dist/esbuild-plugin/index.d.ts",
+        "default": "./dist/esbuild-plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/esbuild-plugin/index.d.cts",
+        "default": "./dist/esbuild-plugin/index.cjs"
+      }
     },
     "./babel": {
-      "types": "./dist/babel-plugin/index.d.ts",
-      "import": "./dist/babel-plugin/index.js",
-      "require": "./dist/babel-plugin/index.cjs"
+      "import": {
+        "types": "./dist/babel-plugin/index.d.ts",
+        "default": "./dist/babel-plugin/index.js"
+      },
+      "require": {
+        "types": "./dist/babel-plugin/index.d.cts",
+        "default": "./dist/babel-plugin/index.cjs"
+      }
     },
+    "./global": "./dist/grabby.global.js",
+    "./loader": "./dist/loader.global.js",
     "./builder": {
       "require": "./dist/builder/index.js"
     },
     "./dist/builder/builders/application/index": "./dist/builder/builders/application/index.js",
     "./dist/builder/builders/dev-server/index": "./dist/builder/builders/dev-server/index.js",
-    "./angular/esbuild": {
-      "types": "./dist/esbuild-plugin/index.d.ts",
-      "import": "./dist/esbuild-plugin/index.js",
-      "require": "./dist/esbuild-plugin/index.cjs"
-    },
     "./builders.json": "./builders.json",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "builders.json",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
-    "prebuild": "node -e \"require('fs').copyFileSync('../../README.md','README.md')\"",
+    "prebuild": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.copyFileSync('../../README.md','README.md');fs.copyFileSync('../../LICENSE','LICENSE')\"",
     "build": "tsup",
     "postbuild": "node -e \"const fs=require('fs'),p=require('path');['application','dev-server'].forEach(b=>{const d=p.join('dist','builder','builders',b);fs.mkdirSync(d,{recursive:true});fs.copyFileSync(p.join('src','builder','builders',b,'schema.json'),p.join(d,'schema.json'))});fs.writeFileSync(p.join('dist','builder','package.json'),'{\\\"type\\\":\\\"commonjs\\\"}')\"",
     "dev": "tsup --watch",
@@ -120,40 +181,11 @@
     "@angular/core": "^21.0.0",
     "@types/babel__core": "^7.20.5",
     "esbuild": "^0.21.0",
+    "jsdom": "^26",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vite": "^5.0.0",
     "vitest": "^2.0.0",
     "vue": "^3.5"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/githumbi/grabby.git",
-    "directory": "packages/grabby"
-  },
-  "homepage": "https://github.com/githumbi/grabby",
-  "bugs": "https://github.com/githumbi/grabby/issues",
-  "keywords": [
-    "grabby",
-    "feedback",
-    "ui-feedback",
-    "annotation",
-    "ai",
-    "coding-agent",
-    "claude",
-    "developer-tools",
-    "react",
-    "angular",
-    "vue",
-    "svelte",
-    "vite",
-    "webpack",
-    "esbuild"
-  ],
-  "unpkg": "./dist/grabby.global.js",
-  "jsdelivr": "./dist/grabby.global.js",
-  "sideEffects": [
-    "./dist/grabby.global.js",
-    "./dist/loader.global.js"
-  ]
+  }
 }

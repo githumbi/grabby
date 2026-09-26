@@ -7,7 +7,7 @@ export default defineConfig([
     entry: { 'core/index': 'src/core/index.ts', 'live/index': 'src/live.ts' },
     format: ['esm', 'cjs'],
     dts: true,
-    clean: true,
+    clean: false,
     sourcemap: true,
     splitting: true,
     outDir: 'dist',

@@ -4,7 +4,7 @@ import { stampJsx } from './jsx';
 import { stampVue } from './vue';
 
 export interface GrabbyPluginOptions {
-  /** Paths are stamped relative to this. Default: process.cwd() */
+  /** Paths are stamped relative to this. Default: the bundler's project root */
   rootDir?: string;
   /** Files to stamp. Default: .jsx, .tsx and .vue */
   include?: RegExp;
@@ -34,7 +34,9 @@ function isProduction(): boolean {
  * and Angular uses the Grabby builders instead.
  */
 export const unplugin = createUnplugin<GrabbyPluginOptions | undefined>((options = {}) => {
-  const rootDir = options.rootDir ?? process.cwd();
+  // The bundler's own root beats cwd: dev servers are often started from
+  // elsewhere (a monorepo root, an IDE), which would give ../../ paths.
+  let rootDir = options.rootDir ?? process.cwd();
   const include = options.include ?? DEFAULT_INCLUDE;
   const exclude = options.exclude ?? DEFAULT_EXCLUDE;
   let enabled = options.includeSourceInBuild === true || !isProduction();
@@ -63,13 +65,16 @@ export const unplugin = createUnplugin<GrabbyPluginOptions | undefined>((options
     vite: {
       configResolved(config) {
         enabled = options.includeSourceInBuild === true || config.command === 'serve';
+        if (!options.rootDir) rootDir = config.root;
       },
     },
     webpack(compiler) {
       enabled = options.includeSourceInBuild === true || compiler.options.mode !== 'production';
+      if (!options.rootDir && compiler.context) rootDir = compiler.context;
     },
     rspack(compiler) {
       enabled = options.includeSourceInBuild === true || compiler.options.mode !== 'production';
+      if (!options.rootDir && compiler.context) rootDir = compiler.context;
     },
   };
 });

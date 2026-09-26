@@ -33,7 +33,7 @@ import { isUiNode, eventTarget, isEditableElement, disposeUiRoot, setStyleNonce 
 import { loadHistory, saveHistory, clearPersistedHistory, flushPendingWrite } from './storage/history-persistence';
 import { putScreenshot, deleteScreenshots } from './storage/screenshot-store';
 import { captureTarget } from './capture/capture';
-import { captureScreenshot, type Screenshot } from './capture/screenshot';
+import { captureScreenshot, disposeScreenshotSandbox, type Screenshot } from './capture/screenshot';
 import { formatExport } from './capture/export';
 import { sanitizeRoute } from './capture/redact';
 import { disposeStyleBaseline } from './capture/styles';
@@ -816,6 +816,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       outbox?.dispose();
       themeManager.dispose();
       disposeStyleBaseline();
+      disposeScreenshotSandbox();
       document.documentElement.style.removeProperty('--grabby-toast-bottom');
       disposeUiRoot();
     },

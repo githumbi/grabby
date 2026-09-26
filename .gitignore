@@ -5,3 +5,6 @@ dist/
 .DS_Store
 packages/grabby/README.md
 *.tgz
+packages/*/LICENSE
+.grabby/
+.grabby-demo/

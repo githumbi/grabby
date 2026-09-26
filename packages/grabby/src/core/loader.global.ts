@@ -31,6 +31,13 @@
     }
     if (script!.nonce) full.nonce = script!.nonce;
     if (script!.crossOrigin) full.crossOrigin = script!.crossOrigin;
+    // Subresource Integrity for the second file: the loader's own integrity
+    // attribute only covers the loader.
+    const sri = script!.dataset.integrity;
+    if (sri) {
+      full.integrity = sri;
+      full.crossOrigin = 'anonymous';
+    }
     document.head.appendChild(full);
   }
 

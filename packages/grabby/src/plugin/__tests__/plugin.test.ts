@@ -5,7 +5,7 @@ type Hooks = {
   enforce?: string;
   transformInclude: (id: string) => boolean;
   transform: (code: string, id: string) => Promise<{ code: string; map?: unknown } | null>;
-  vite: { configResolved: (c: { command: string }) => void };
+  vite: { configResolved: (c: { command: string; root?: string }) => void };
 };
 
 function hooks(options = {}): Hooks {
@@ -44,6 +44,13 @@ describe('grabby build plugin', () => {
   it('ignores a query suffix on JSX module ids', async () => {
     const result = await run('const a = <div />;', '/app/src/A.jsx?t=123');
     expect(result?.code).toContain('data-grabby-loc="src/A.jsx:1:11"');
+  });
+
+  it('stamps paths relative to the Vite root, wherever the process started', async () => {
+    const h = unplugin.raw({}, { framework: 'vite' } as never) as unknown as Hooks;
+    h.vite.configResolved({ command: 'serve', root: '/work/app' });
+    const out = await h.transform('const a = <div />;', '/work/app/src/A.jsx');
+    expect(out?.code).toContain('data-grabby-loc="src/A.jsx:1:11"');
   });
 
   it('is dev-only in Vite unless includeSourceInBuild is set', () => {

@@ -1,0 +1,45 @@
+name: Release
+
+# Publishes with npm trusted publishing (OIDC): no npm token is stored in
+# this repository. Configure each package once on npmjs.com under
+# Settings → Trusted publishing → GitHub Actions, with this repository and
+# the workflow file name `release.yml`. Provenance is attached automatically.
+
+on:
+  push:
+    branches: [main]
+
+concurrency: release
+
+permissions:
+  contents: write       # version commits and tags
+  pull-requests: write  # the "Version packages" PR
+  id-token: write       # OIDC for npm trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@^11.5.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: node scripts/check-size.mjs
+
+      - name: Open a version PR, or publish once it's merged
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm changeset publish
+          commit: 'Version packages'
+          title: 'Version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

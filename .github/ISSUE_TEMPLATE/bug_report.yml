@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: A minimal repo or steps. Screenshots of the page help.
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework
+      options: [React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, Solid, Preact, Plain HTML, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options: [Local (developer), Live site (feedback link), Collector / MCP / pull]
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "@githumbi/grabby, @githumbi/grabby-server, browser"
+  - type: markdown
+    attributes:
+      value: "**Security issue?** Please don't file it here; see SECURITY.md."

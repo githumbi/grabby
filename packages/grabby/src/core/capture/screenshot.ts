@@ -25,6 +25,63 @@ function blurMasked(cloned: Node): void {
   }
 }
 
+const SANDBOX_HTML = '<!DOCTYPE html><meta charset="UTF-8"><title></title><body>';
+let sandbox: HTMLIFrameElement | null = null;
+let policy: { createHTML(s: string): unknown } | null | undefined;
+
+/**
+ * The HTML to give the sandbox, as a TrustedHTML where the Trusted Types API
+ * exists. Returns null when the page's CSP won't let us create the "grabby"
+ * policy; the sandbox then stays about:blank rather than violate the CSP.
+ */
+function sandboxHtml(): unknown | null {
+  const tt = (window as unknown as { trustedTypes?: { createPolicy(n: string, r: { createHTML(s: string): string }): { createHTML(s: string): unknown } } }).trustedTypes;
+  if (!tt) return SANDBOX_HTML;
+  if (policy === undefined) {
+    try {
+      policy = tt.createPolicy('grabby', { createHTML: (html: string) => (html === SANDBOX_HTML ? html : '') });
+    } catch {
+      policy = null;
+    }
+  }
+  return policy ? policy.createHTML(SANDBOX_HTML) : null;
+}
+
+/**
+ * The renderer needs a blank document to read default styles from. It would
+ * create one by assigning iframe.srcdoc, which pages enforcing Trusted Types
+ * block, so we hand it one we made safely, and reuse it between captures.
+ */
+async function getSandbox(): Promise<HTMLIFrameElement> {
+  if (sandbox?.isConnected) return sandbox;
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.setAttribute('tabindex', '-1');
+  frame.setAttribute(IGNORE_ATTR, '');
+  Object.assign(frame.style, { position: 'fixed', width: '0', height: '0', border: '0', visibility: 'hidden', pointerEvents: 'none' });
+  document.documentElement.appendChild(frame);
+  const html = sandboxHtml();
+  if (html !== null) {
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      frame.addEventListener('load', done, { once: true });
+      setTimeout(done, 1000);
+      try {
+        (frame as unknown as { srcdoc: unknown }).srcdoc = html;
+      } catch {
+        done();
+      }
+    });
+  }
+  sandbox = frame;
+  return frame;
+}
+
+export function disposeScreenshotSandbox(): void {
+  sandbox?.remove();
+  sandbox = null;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), ms);
@@ -51,8 +108,8 @@ export async function captureScreenshot(el: Element): Promise<Screenshot | null>
   const scale = Math.min(dpr, MAX_SIDE / Math.max(cssWidth, cssHeight));
 
   const render = async (): Promise<Screenshot | null> => {
-    const { domToBlob } = await import('modern-screenshot');
-    const blob = await domToBlob(el, {
+    const { createContext, destroyContext, domToBlob } = await import('modern-screenshot');
+    const context = await createContext(el, {
       width: cssWidth,
       height: cssHeight,
       scale,
@@ -65,6 +122,15 @@ export async function captureScreenshot(el: Element): Promise<Screenshot | null>
       style: { margin: '0' },
       timeout: TIMEOUT_MS,
     });
+    context.sandbox = await getSandbox();
+    let blob: Blob | null;
+    try {
+      blob = await domToBlob(context);
+    } finally {
+      // Keep our sandbox for next time; free everything else.
+      context.sandbox = undefined;
+      destroyContext(context);
+    }
     if (!blob) return null;
     return { blob, width: Math.round(cssWidth * scale), height: Math.round(cssHeight * scale) };
   };

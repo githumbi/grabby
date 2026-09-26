@@ -14,9 +14,12 @@
     "dev": "turbo run dev",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "size": "node scripts/check-size.mjs",
+    "changeset": "changeset"
   },
   "devDependencies": {
+    "@changesets/cli": "^2",
     "@types/node": "^25.3.4",
     "turbo": "^2.8.13"
   }
