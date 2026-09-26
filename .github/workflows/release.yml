@@ -35,7 +35,7 @@ jobs:
       - run: node scripts/check-size.mjs
 
       - name: Open a version PR, or publish once it's merged
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: pnpm changeset version
           publish: pnpm changeset publish
