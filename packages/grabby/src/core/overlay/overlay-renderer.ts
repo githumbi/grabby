@@ -1,5 +1,6 @@
 import { Z_INDEX_OVERLAY, Z_INDEX_LABEL } from '../constants';
 import { addStyles, hasStyles, removeStyles, getUiRoot } from '../ui/root';
+import { describeElement } from '../capture/describe';
 
 const OVERLAY_ID = '__grabby-overlay__';
 const LABEL_ID = '__grabby-label__';
@@ -13,7 +14,16 @@ export interface OverlayRenderer {
   dispose(): void;
 }
 
-export function createOverlayRenderer(): OverlayRenderer {
+export interface OverlayOptions {
+  /**
+   * Reviewer wording: name what the element is in plain words ("Card \u201CYour
+   * plan\u201D \u00B7 Click to select") instead of its tag, classes and source file.
+   * Used in live mode, where reviewers may not be developers.
+   */
+  plainLabels?: boolean;
+}
+
+export function createOverlayRenderer(options: OverlayOptions = {}): OverlayRenderer {
   let overlay: HTMLDivElement | null = null;
   let label: HTMLDivElement | null = null;
   let rafId: number | null = null;
@@ -21,6 +31,8 @@ export function createOverlayRenderer(): OverlayRenderer {
   let currentComponentName: string | null = null;
   let currentSourcePath: string | null = null;
   let currentCssClasses: string[] = [];
+  /** Computed once per element, not on every animation frame. */
+  let currentPlainLabel = '';
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -50,6 +62,11 @@ export function createOverlayRenderer(): OverlayRenderer {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      #${LABEL_ID}.grabby-plain {
+        font: 600 12px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        padding: 3px 8px;
+        border-radius: 6px;
+      }
     `);
   }
 
@@ -63,6 +80,7 @@ export function createOverlayRenderer(): OverlayRenderer {
     if (!label) {
       label = document.createElement('div');
       label.id = LABEL_ID;
+      if (options.plainLabels) label.className = 'grabby-plain';
       getUiRoot().appendChild(label);
     }
   }
@@ -87,6 +105,11 @@ export function createOverlayRenderer(): OverlayRenderer {
 
     const tag = currentElement.tagName.toLowerCase();
     let labelText = `<${tag}>`;
+    if (options.plainLabels) {
+      label.textContent = `${currentPlainLabel} \u00B7 Click to select`;
+      placeLabel(rect);
+      return;
+    }
     // Utility-class pages (Tailwind) can carry dozens of classes; a few are
     // enough to recognise the element without the label spanning the page.
     if (currentCssClasses.length > 0) {
@@ -100,7 +123,11 @@ export function createOverlayRenderer(): OverlayRenderer {
       labelText += ` \u2014 ${currentSourcePath}`;
     }
     label.textContent = labelText;
+    placeLabel(rect);
+  }
 
+  function placeLabel(rect: DOMRect): void {
+    if (!label) return;
     // Position label above the element, or below if no room
     const labelHeight = 20;
     const gap = 4;
@@ -141,6 +168,7 @@ export function createOverlayRenderer(): OverlayRenderer {
       ensureElements();
       currentElement = element;
       currentComponentName = componentName;
+      if (options.plainLabels) currentPlainLabel = describeElement(element);
       currentSourcePath = sourcePath ?? null;
       currentCssClasses = cssClasses ?? [];
       stopTracking();
