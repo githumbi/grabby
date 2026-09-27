@@ -19,9 +19,11 @@ Especially interesting:
 - Capture of data it promises not to capture (form values, hidden inputs, credentials, tokens in URLs).
 - Bypassing the collector's key, origin, session or admin-token checks; reading or deleting other people's comments.
 - DNS rebinding or cross-site access to a local collector.
+- Getting at the inbox without its link, using the inbox token for admin actions, or leaking the token (to logs, Referer headers, other sites).
+- Making the collector's alerts post somewhere the owner didn't choose, or mention people in Slack.
 - Anything in the published packages that runs code you didn't ask for.
 
-Out of scope: denial of service by volume against a self-hosted collector (put it behind your platform's rate limiting), and issues that need an already-compromised browser or machine.
+Out of scope: denial of service by volume against a collector, including using up a Cloudflare free plan's daily quota (put it behind your platform's rate limiting), and issues that need an already-compromised browser or machine.
 
 ## How releases are protected
 
@@ -33,4 +35,4 @@ The repository is set up against the attacks behind the 2025–2026 npm worms (S
 - **GitHub Actions**: every action is pinned to a full commit SHA; workflows start with no permissions and each job asks for the minimum; checkouts don't keep credentials; workflows are scanned with zizmor on every PR; `main` only changes through PRs that pass CI.
 - **Releases** (`release.yml`): the build and tests run in a job that can't publish. The publish job receives the built files, restores no caches, and is the only one allowed an npm OIDC token.
 - **Dependabot** waits 7 days before proposing a new version (30 for majors), and major updates come as separate PRs.
-- **For users**: the packages have no install scripts, and everything Grabby writes for you (MCP config, `pull`, CDN tags) is pinned to an exact version, with integrity hashes for script tags.
+- **For users**: the packages have no install scripts, and everything Grabby writes for you (MCP config, `pull`, CDN tags) is pinned to an exact version, with integrity hashes for script tags. `grabby share` deploys the prebuilt `dist/worker/worker.js` from the published `@githumbi/grabby-server` as-is (`wrangler deploy --no-bundle`), so the code running in your Cloudflare account is the file npm published with provenance. It runs Wrangler at a pinned version at least 7 days old, through `npx` with install scripts turned off, and passes the admin token to Cloudflare in a temporary owner-only file rather than on the command line.

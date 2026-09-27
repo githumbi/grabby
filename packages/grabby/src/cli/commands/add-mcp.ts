@@ -31,10 +31,15 @@ function getMcpServerEntry(): { type: string; command: string; args: string[] } 
   };
 }
 
-export async function addMcp(): Promise<void> {
-  log('Adding grabby MCP server...\n');
+/**
+ * Adds the grabby MCP server to .mcp.json. It never writes a token there
+ * (.mcp.json is often committed): the server finds the project's
+ * .grabby/config.json itself when `grabby share` has been run.
+ */
+export async function addMcp(options: { cwd?: string; quiet?: boolean } = {}): Promise<void> {
+  if (!options.quiet) log('Adding grabby MCP server...\n');
 
-  const mcpJsonPath = join(process.cwd(), '.mcp.json');
+  const mcpJsonPath = join(options.cwd ?? process.cwd(), '.mcp.json');
   let config: Record<string, unknown> = {};
 
   if (existsSync(mcpJsonPath)) {
@@ -53,11 +58,13 @@ export async function addMcp(): Promise<void> {
   config.mcpServers = servers;
 
   writeFileSync(mcpJsonPath, JSON.stringify(config, null, 2) + '\n');
-  success('Added grabby MCP server to .mcp.json');
+  success(options.quiet ? '\x1b[32m✓\x1b[0m .mcp.json (grabby MCP server)' : 'Added grabby MCP server to .mcp.json');
+  if (options.quiet) return;
 
   console.log('');
-  console.log('  It also collects comments from your app on http://localhost:3456.');
-  console.log("  Point Grabby at it:  initGrabby({ server: 'http://localhost:3456' })");
+  console.log('  After `npx @githumbi/grabby share`, it reads your live site\'s feedback.');
+  console.log('  Otherwise it collects comments from your app on http://localhost:3456;');
+  console.log("  point Grabby at it:  initGrabby({ server: 'http://localhost:3456' })");
   console.log('');
   console.log('  \x1b[1mRestart your editor\x1b[0m to activate the MCP connection.');
   console.log('  When prompted, \x1b[1mapprove the MCP server\x1b[0m in your editor.');

@@ -1,25 +1,10 @@
 import { mkdirSync, readFileSync, existsSync, renameSync } from 'node:fs';
 import { writeFile, rename, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import type { GrabbyComment } from '@githumbi/grabby/export';
+import { applyFilter, computeStats, type ListFilter, type StoredComment } from './core/types';
+import { mayUpdate } from './core/storage';
 
-export interface StoredComment extends GrabbyComment {
-  projectId: string;
-  receivedAt: number;
-  /** Site the comment came from, as sent by the browser. */
-  origin: string | null;
-  /** File name under screenshots/, when one was uploaded. */
-  screenshotFile?: string;
-}
-
-export interface ListFilter {
-  status?: 'open' | 'resolved' | 'all';
-  author?: string;
-  route?: string;
-  since?: number;
-  projectId?: string;
-  limit?: number;
-}
+export type { ListFilter, StoredComment } from './core/types';
 
 const MAX_COMMENTS = 10_000;
 
@@ -75,16 +60,7 @@ export class CommentStore {
   }
 
   list(filter: ListFilter = {}): StoredComment[] {
-    const status = filter.status ?? 'open';
-    let out = this.comments.filter((c) =>
-      (status === 'all' || c.status === status)
-      && (!filter.projectId || c.projectId === filter.projectId)
-      && (!filter.since || c.receivedAt >= filter.since)
-      && (!filter.route || c.page.route === filter.route)
-      && (!filter.author || (c.author.name ?? '').toLowerCase() === filter.author.toLowerCase() || c.author.sessionId.startsWith(filter.author)),
-    );
-    out = out.sort((a, b) => a.createdAt - b.createdAt);
-    return filter.limit ? out.slice(-filter.limit) : out;
+    return applyFilter(this.comments, filter);
   }
 
   get(id: string): StoredComment | undefined {
@@ -99,7 +75,7 @@ export class CommentStore {
   async upsert(comment: StoredComment): Promise<'created' | 'updated' | 'forbidden'> {
     const existing = this.get(comment.id);
     if (existing) {
-      if (existing.author.sessionId !== comment.author.sessionId || existing.projectId !== comment.projectId) return 'forbidden';
+      if (!mayUpdate(existing, comment)) return 'forbidden';
       Object.assign(existing, {
         comment: comment.comment,
         updatedAt: comment.updatedAt,
@@ -176,21 +152,6 @@ export class CommentStore {
   }
 
   stats(projectId?: string) {
-    const all = this.comments.filter((c) => !projectId || c.projectId === projectId);
-    const byStatus = { open: 0, resolved: 0 };
-    const byAuthor = new Map<string, number>();
-    const byRoute = new Map<string, number>();
-    for (const c of all) {
-      byStatus[c.status]++;
-      const who = !c.author.anonymous && c.author.name ? c.author.name : `Anonymous ${c.author.sessionId.replace(/-/g, '').slice(0, 4)}`;
-      byAuthor.set(who, (byAuthor.get(who) ?? 0) + 1);
-      byRoute.set(c.page.route, (byRoute.get(c.page.route) ?? 0) + 1);
-    }
-    return {
-      total: all.length,
-      ...byStatus,
-      byAuthor: Object.fromEntries(byAuthor),
-      byRoute: Object.fromEntries(byRoute),
-    };
+    return computeStats(this.comments.filter((c) => !projectId || c.projectId === projectId));
   }
 }

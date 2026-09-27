@@ -1,26 +1,15 @@
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { randomToken } from './core/crypto';
+import { configFromEnv, envFlag, normalizeOrigin, type CollectorConfig } from './core/config';
 
-export interface ProjectConfig {
-  id: string;
-  name: string;
-  /** Write-only key, safe to embed in a web page. */
-  publicKey: string;
-  /** Sites allowed to post comments, e.g. "https://example.com". */
-  allowedOrigins: string[];
-}
+export { trimTrailingSlashes, publicConfigProblem, type ProjectConfig } from './core/config';
 
-export interface ServerConfig {
+export interface ServerConfig extends CollectorConfig {
   version: 1;
-  /** Accept comments from other machines. Requires keys and an origin allowlist. */
-  public: boolean;
   host: string;
   port: number;
-  /** Secret for reading, resolving and deleting comments (CLI, MCP, dashboard). */
-  adminToken: string;
-  projects: ProjectConfig[];
   dataDir: string;
 }
 
@@ -31,31 +20,11 @@ export function defaultDataDir(): string {
 }
 
 export function generateKey(prefix: 'pk' | 'sk'): string {
-  return `${prefix}_${randomBytes(prefix === 'sk' ? 24 : 16).toString('base64url')}`;
+  return randomToken(prefix, prefix === 'sk' ? 24 : 16);
 }
 
 export function configPath(dataDir: string, explicit?: string): string {
   return explicit || process.env.GRABBY_CONFIG || path.join(dataDir, 'config.json');
-}
-
-/** Loop, not /\/+$/, which backtracks badly on long runs of slashes. */
-export function trimTrailingSlashes(url: string): string {
-  let end = url.length;
-  while (end > 0 && url[end - 1] === '/') end--;
-  return url.slice(0, end);
-}
-
-function normalizeOrigin(origin: string): string {
-  try {
-    return new URL(origin).origin;
-  } catch {
-    return trimTrailingSlashes(origin);
-  }
-}
-
-function parseOrigins(raw: string | undefined): string[] | null {
-  if (!raw) return null;
-  return raw.split(',').map((o) => o.trim()).filter(Boolean).map(normalizeOrigin);
 }
 
 export interface LoadOptions {
@@ -85,43 +54,31 @@ export function loadConfig(options: LoadOptions = {}): ServerConfig {
   }
 
   const env = process.env;
-  const isPublic = options.public ?? (env.GRABBY_PUBLIC ? env.GRABBY_PUBLIC === '1' || env.GRABBY_PUBLIC === 'true' : fromFile.public ?? false);
-  const projects: ProjectConfig[] = (fromFile.projects ?? []).map((p) => ({
-    id: String(p.id),
-    name: String(p.name ?? p.id),
-    publicKey: String(p.publicKey),
-    allowedOrigins: (p.allowedOrigins ?? []).map(normalizeOrigin),
-  }));
-  const envKey = env.GRABBY_PUBLIC_KEY;
-  const envOrigins = parseOrigins(env.GRABBY_ALLOWED_ORIGINS);
-  if (envKey || envOrigins) {
-    const first = projects[0] ?? { id: 'default', name: 'default', publicKey: '', allowedOrigins: [] };
-    if (envKey) first.publicKey = envKey;
-    if (envOrigins) first.allowedOrigins = envOrigins;
-    if (!projects[0]) projects.push(first);
-  }
+  const isPublic = options.public ?? envFlag(env.GRABBY_PUBLIC) ?? fromFile.public ?? false;
+  const collector = configFromEnv(env, { ...fromFile, public: isPublic });
 
   return {
     version: 1,
+    ...collector,
     public: isPublic,
-    host: options.host || env.GRABBY_HOST || fromFile.host || (isPublic ? '0.0.0.0' : '127.0.0.1'),
+    host: options.host || env.GRABBY_HOST || fileHost(fromFile.host, isPublic),
     port: options.port || Number(env.GRABBY_PORT) || fromFile.port || DEFAULT_PORT,
-    adminToken: env.GRABBY_ADMIN_TOKEN || fromFile.adminToken || '',
-    projects,
     dataDir,
   };
 }
 
-/** Why a public server can't start with this config, or null when it can. */
-export function publicConfigProblem(config: ServerConfig): string | null {
-  if (!config.adminToken || config.adminToken.length < 20) return 'an admin token (run `grabby-server init`, or set GRABBY_ADMIN_TOKEN)';
-  if (config.projects.length === 0) return 'at least one project with a public key';
-  for (const p of config.projects) {
-    if (!p.publicKey || p.publicKey.length < 12) return `a public key for project "${p.id}"`;
-    if (p.allowedOrigins.length === 0) return `allowedOrigins for project "${p.id}" (the sites allowed to send comments)`;
-    if (p.allowedOrigins.includes('*')) return `a real origin list for project "${p.id}" ("*" is not allowed)`;
-  }
-  return null;
+/**
+ * Older `init` versions saved the default host "127.0.0.1" into the file,
+ * which kept `start --public` on loopback. A saved loopback address counts as
+ * "not chosen" when public; any other saved host is respected.
+ */
+function fileHost(saved: string | undefined, isPublic: boolean): string {
+  if (!isPublic) return saved || '127.0.0.1';
+  return saved && !isLoopbackHost(saved) ? saved : '0.0.0.0';
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '::1' || host.startsWith('127.');
 }
 
 export interface InitOptions {
@@ -151,8 +108,9 @@ export function initConfig(options: InitOptions = {}): { file: string; config: S
     dataDir,
   };
   mkdirSync(path.dirname(file), { recursive: true });
-  const { dataDir: _omit, ...onDisk } = config;
-  void _omit;
+  // Host and port stay out of the file so --public and env can pick them.
+  const { dataDir: _d, host: _h, port: _p, ...onDisk } = config;
+  void _d; void _h; void _p;
   try {
     // 'wx' fails if the file exists, so checking and creating are one step.
     writeFileSync(file, `${JSON.stringify(onDisk, null, 2)}\n`, { mode: 0o600, flag: options.force ? 'w' : 'wx' });

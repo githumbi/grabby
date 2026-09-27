@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
 import { createInterface } from 'readline';
 import { detectStack, installCommand, type Stack } from '../utils/detect-stack';
-import { patchViteConfig, patchEntry, patchAngularJson, patchAngularAppConfig, type PatchResult } from '../utils/patch-source';
+import { patchViteConfig, patchEntry, patchAngularJson, patchAngularAppConfig, type LiveTag, type PatchResult } from '../utils/patch-source';
 import { GRABBY_VERSION, SERVER_PACKAGE } from '../versions';
 
 const PKG = '@githumbi/grabby';
@@ -41,6 +41,18 @@ function sri(file: string): string | null {
   } catch {
     return null; // running from source
   }
+}
+
+/** The live-feedback loader tag's contents, pinned to this exact version with integrity hashes. */
+export function liveTag(server: string, projectKey: string): LiveTag {
+  return {
+    src: `https://cdn.jsdelivr.net/npm/${PKG}@${GRABBY_VERSION}/dist/loader.global.js`,
+    integrity: sri('loader.global.js'),
+    // The loader fetches the full build itself; data-integrity covers that file.
+    dataIntegrity: sri('grabby.global.js'),
+    server,
+    projectKey,
+  };
 }
 
 /** A script tag pinned to this exact version, with integrity hashes. */
