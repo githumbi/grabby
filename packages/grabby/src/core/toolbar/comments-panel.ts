@@ -5,6 +5,7 @@ import { safeQuery } from '../utils';
 import { authorLabel } from '../capture/export';
 import { getScreenshot } from '../storage/screenshot-store';
 import { ICON_DISMISS } from './toolbar-icons';
+import { describeTarget } from '../capture/describe';
 import { Z_INDEX_POPOVER, TOOLBAR_POPOVER_OFFSET } from '../constants';
 
 const PANEL_ID = '__grabby-comments__';
@@ -190,16 +191,19 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks, options: 
 
   function row(comment: GrabbyComment, showAuthors: boolean): HTMLElement {
     const t = comment.target;
-    const meta: Node[] = [h('span', { class: 'grabby-kind' }, t.kind)];
-    if (t.component) meta.push(document.createTextNode(`${t.component} `));
-    if (t.source) {
-      meta.push(h('a', {
-        href: vsCodeUri(t.source.file, t.source.line, t.source.column),
-        title: `Open ${t.source.file} in VS Code`,
-        onclick: (e: Event) => e.stopPropagation(),
-      }, `${basename(t.source.file)}${t.source.line != null ? `:${t.source.line}` : ''}`));
-    } else if (!t.component) {
-      meta.push(document.createTextNode(`<${t.tag}>`));
+    // Reviewers see what they commented on in plain words; developers see kind, component and file.
+    const meta: Node[] = live ? [document.createTextNode(`${describeTarget(t)} `)] : [h('span', { class: 'grabby-kind' }, t.kind)];
+    if (!live) {
+      if (t.component) meta.push(document.createTextNode(`${t.component} `));
+      if (t.source) {
+        meta.push(h('a', {
+          href: vsCodeUri(t.source.file, t.source.line, t.source.column),
+          title: `Open ${t.source.file} in VS Code`,
+          onclick: (e: Event) => e.stopPropagation(),
+        }, `${basename(t.source.file)}${t.source.line != null ? `:${t.source.line}` : ''}`));
+      } else if (!t.component) {
+        meta.push(document.createTextNode(`<${t.tag}>`));
+      }
     }
     const tail = [showAuthors && !live ? authorLabel(comment.author) : '', formatRelativeTime(comment.createdAt)].filter(Boolean);
     meta.push(document.createTextNode(` · ${tail.join(' · ')}`));

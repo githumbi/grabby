@@ -85,7 +85,7 @@ It's your site's address with `?grabby=` and your project key on the end. `share
 https://my-app.netlify.app/pricing?grabby=pk_…
 ```
 
-Reviewers get a **Comment** button and a short three-step tip:
+Reviewers get a **Comment** button and a short three-step tip. As they move the pointer, Grabby names what's under it in plain words, such as `Button "Start free trial" · Click to select` or `Card "Your plan"`, so nobody needs to know HTML:
 
 1. Click **Comment**.
 2. Click the part of the page they want to talk about.

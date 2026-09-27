@@ -208,7 +208,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     }
   }
 
-  const overlay = createOverlayRenderer();
+  // Reviewers on a live site may not be developers: name elements in plain words.
+  const overlay = createOverlayRenderer({ plainLabels: live });
   const crosshair = createCrosshair();
   const freezeOverlay = createFreezeOverlay();
   const pluginRegistry = createPluginRegistry();
