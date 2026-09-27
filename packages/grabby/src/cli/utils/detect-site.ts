@@ -32,10 +32,9 @@ export function guessSiteOrigins(root: string): string[] {
   const found: string[] = [];
   try {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { homepage?: unknown };
-    if (typeof pkg.homepage === 'string' && !/github\.com\//.test(pkg.homepage)) {
-      const o = toOrigin(pkg.homepage);
-      if (o) found.push(o);
-    }
+    // A GitHub repo page is a common `homepage` that isn't the site itself.
+    const o = typeof pkg.homepage === 'string' ? toOrigin(pkg.homepage) : null;
+    if (o && new URL(o).hostname !== 'github.com') found.push(o);
   } catch { /* no package.json */ }
   for (const cname of ['CNAME', 'public/CNAME', 'static/CNAME']) {
     const file = join(root, cname);

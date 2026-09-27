@@ -216,7 +216,11 @@ export async function share(options: ShareOptions = {}): Promise<void> {
   if (!inbox) {
     const res = await collector(server, '/v1/admin/inbox-token', adminToken, { method: 'POST' });
     if (!res.ok) throw new Error(`could not create the inbox link (${res.status})`);
-    inbox = ((await res.json()) as { url: string }).url;
+    inbox = ((await res.json()) as { url?: unknown }).url as string;
+    // Only keep a link to the collector we just talked to.
+    let sameCollector = false;
+    try { sameCollector = typeof inbox === 'string' && new URL(inbox).origin === new URL(server).origin; } catch { /* not a URL */ }
+    if (!sameCollector) throw new Error(`${server} returned an unexpected inbox link`);
   }
 
   // 3. Alerts.

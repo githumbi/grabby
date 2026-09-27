@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 
 /**
@@ -38,9 +38,15 @@ export function writeProjectConfig(root: string, config: ProjectConfig): string 
 /** Adds `.grabby/` to .gitignore once. Returns true when it changed the file. */
 export function ensureGitignore(root: string): boolean {
   const file = join(root, '.gitignore');
-  const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  let current = '';
+  try {
+    current = readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   if (/^\/?\.grabby\/?\s*$/m.test(current)) return false;
   const sep = current && !current.endsWith('\n') ? '\n' : '';
-  writeFileSync(file, `${current}${sep}# Grabby: collector settings and admin token\n.grabby/\n`);
+  // Append rather than rewrite, so nothing written in between is lost.
+  appendFileSync(file, `${sep}# Grabby: collector settings and admin token\n.grabby/\n`);
   return true;
 }
