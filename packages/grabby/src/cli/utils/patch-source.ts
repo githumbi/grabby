@@ -88,10 +88,10 @@ export interface LiveTag {
   projectKey: string;
 }
 
-export type TagStyle = 'html' | 'jsx' | 'next-script';
+export type TagStyle = 'html' | 'astro' | 'jsx' | 'next-script';
 
 function tagAttrs(tag: LiveTag, style: TagStyle): string[] {
-  const jsx = style !== 'html';
+  const jsx = style === 'jsx' || style === 'next-script';
   const q = (v: string) => JSON.stringify(v);
   return [
     `src=${q(tag.src)}`,
@@ -101,6 +101,8 @@ function tagAttrs(tag: LiveTag, style: TagStyle): string[] {
     `data-server=${q(tag.server)}`,
     `data-project-key=${q(tag.projectKey)}`,
     style === 'next-script' ? 'strategy="afterInteractive"' : 'defer',
+    // Astro leaves an is:inline script exactly as written instead of bundling it.
+    ...(style === 'astro' ? ['is:inline'] : []),
   ];
 }
 
@@ -121,13 +123,14 @@ function indentAt(code: string, index: number): string {
  * Puts the live-feedback loader in a page: rewrites an existing Grabby tag in
  * place (new version, server or key), or adds one before the only </body>.
  * `next-app` is an App Router layout (next/script); `jsx` is any other JSX
- * file with a raw <script> (e.g. pages/_document); `html` is an HTML file.
+ * file with a raw <script> (e.g. pages/_document); `html` is an HTML file;
+ * `astro` is an Astro layout (is:inline, so Astro doesn't bundle it).
  */
-export function patchLoaderTag(code: string, tag: LiveTag, kind: 'html' | 'jsx' | 'next-app'): PatchResult {
+export function patchLoaderTag(code: string, tag: LiveTag, kind: 'html' | 'astro' | 'jsx' | 'next-app'): PatchResult {
   const existing = EXISTING_TAG.exec(code);
   if (existing) {
     const name = existing[1];
-    const style: TagStyle = name === 'Script' ? 'next-script' : kind === 'html' ? 'html' : 'jsx';
+    const style: TagStyle = name === 'Script' ? 'next-script' : kind === 'html' || kind === 'astro' ? kind : 'jsx';
     const next = renderTag(tag, style, indentAt(code, existing.index), name);
     if (next === existing[0]) return { status: 'already' };
     return { status: 'patched', code: code.slice(0, existing.index) + next + code.slice(existing.index + existing[0].length) };

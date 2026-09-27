@@ -6,7 +6,7 @@
 
 Send a client, tester or stakeholder a link to your site. They click **Comment**, click anything on the page, and type what should change. No account, no install. Every comment arrives with a screenshot, who left it, the page, and where that element lives in your code (component and `file:line`). You read it all in a private inbox, get a Slack message when new feedback comes in, and pass it to Claude, Cursor, Copilot or ChatGPT with one click, or let your agent read it directly.
 
-Setting it up is one command, and it works with Next.js, React, Vue, Svelte, Angular and plain HTML sites, wherever they're hosted.
+Setting it up is one command, and it works with Next.js, Astro, React, Vue, Svelte, Angular and plain HTML sites, wherever they're hosted.
 
 - [Get feedback on your live site](#get-feedback-on-your-live-site): step by step
 - [Read and act on feedback](#4-read-the-feedback)
@@ -51,7 +51,7 @@ It asks for your site's address once (for example `https://my-app.netlify.app`),
 1. **The first time only, a browser window opens to sign in to Cloudflare.** Sign in (or create a free account) and click **Allow**. You can close that tab afterwards.
 2. **The first time only, if your Cloudflare account is new, the terminal asks you to pick a `workers.dev` subdomain.** Answer `Y` and type a name, such as your name or company. It becomes part of your collector's address: `https://grabby-my-app.<your-name>.workers.dev`.
 3. **It sets up the collector** in your Cloudflare account. This takes about 30 seconds.
-4. **It adds the Grabby script to your site**: `app/layout.tsx` (or `src/app/layout.tsx`) in Next.js, `index.html` in Vite, Angular, SvelteKit and plain HTML sites. If it can't find the right file, it prints the tag for you to paste before `</body>`.
+4. **It adds the Grabby script to your site**: `app/layout.tsx` (or `src/app/layout.tsx`) in Next.js, the layout in `src/layouts/` in Astro, `index.html` in Vite, Angular, SvelteKit and plain HTML sites. If it can't find the right file, it prints the tag for you to paste before `</body>`.
 5. **It saves its settings** in `.grabby/config.json`, which is private and added to `.gitignore`, and lets your AI agent read feedback through `.mcp.json`.
 
 It finishes with everything you need:

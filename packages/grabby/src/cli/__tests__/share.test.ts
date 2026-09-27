@@ -8,7 +8,8 @@ import { toOrigin } from '../utils/detect-site';
 
 const runServer = vi.fn();
 vi.mock('../utils/server-cli', () => ({ runServer: (...args: unknown[]) => runServer(...args) }));
-const { share, siteTarget } = await import('../commands/share');
+const { share, siteTarget, setSettleTime } = await import('../commands/share');
+setSettleTime(300);
 const { detectStack } = await import('../utils/detect-stack');
 
 const TAG: LiveTag = {
@@ -77,6 +78,27 @@ function deployResult(result: Record<string, unknown>) {
   });
 }
 
+describe('Astro', () => {
+  it('adds an is:inline tag to the one layout that renders <body>', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'grabby-astro-'));
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { astro: '^7.1.6' } }));
+      mkdirSync(join(dir, 'src', 'layouts'), { recursive: true });
+      writeFileSync(join(dir, 'src', 'layouts', 'BaseLayout.astro'), '---\nconst { title } = Astro.props;\n---\n<html>\n  <body>\n    <slot />\n    <script is:inline src="/assets/js/site.js" defer></script>\n  </body>\n</html>\n');
+      writeFileSync(join(dir, 'src', 'layouts', 'Card.astro'), '<div><slot /></div>\n');
+      const target = siteTarget(detectStack(dir));
+      expect(target).toMatchObject({ kind: 'astro', file: join(dir, 'src', 'layouts', 'BaseLayout.astro') });
+      const out = patchLoaderTag(readFileSync(target!.file, 'utf8'), TAG, 'astro');
+      if (out.status !== 'patched') throw new Error(out.status);
+      expect(out.code).toContain('crossorigin="anonymous"');
+      expect(out.code).toContain('    is:inline\n    ></script>\n  </body>');
+      expect(patchLoaderTag(out.code, TAG, 'astro').status).toBe('already');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('share', () => {
   let dir: string;
   let sent: Array<{ url: string; method: string; auth: string | null; body?: string }>;
@@ -142,6 +164,28 @@ describe('share', () => {
     await share({ cwd: dir, origins: ['https://shop.example'], yes: true, noMcp: true, rotateAdmin: true });
     const [args] = runServer.mock.calls[0] as [string[]];
     expect(args).toEqual(expect.arrayContaining(['--key', 'pk_keepthiskey123', '--rotate-admin']));
+  });
+
+  it('waits for a just-deployed Worker to reach every Cloudflare server', async () => {
+    let edgeMisses = 2;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/v1/admin/inbox-token')) {
+        // Cloudflare's own 404 page, from a server that hasn't got the Worker yet.
+        if (edgeMisses-- > 0) return new Response('There is nothing here yet', { status: 404, headers: { 'content-type': 'text/html' } });
+        return Response.json({ token: 'ik_one', url: 'https://grabby-shop.jane.workers.dev/inbox#k=ik_one' });
+      }
+      return Response.json({ ok: true });
+    }));
+    await share({ cwd: dir, origins: ['https://shop.example'], yes: true, noMcp: true });
+    expect(JSON.parse(readFileSync(join(dir, '.grabby', 'config.json'), 'utf8')).inbox).toContain('#k=ik_one');
+  });
+
+  it('keeps the admin token when a later step fails, so a re-run just works', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('There is nothing here yet', { status: 404, headers: { 'content-type': 'text/html' } })));
+    await expect(share({ cwd: dir, origins: ['https://shop.example'], yes: true, noMcp: true })).rejects.toThrow(/run .*share.* again/);
+    const saved = JSON.parse(readFileSync(join(dir, '.grabby', 'config.json'), 'utf8'));
+    expect(saved).toMatchObject({ adminToken: 'sk_new_admin_token_0123456789', projectKey: 'pk_new' });
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.grabby/');
   });
 
   it('changes nothing on a dry run', async () => {
