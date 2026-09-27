@@ -39,15 +39,16 @@ function who(c: StoredComment): string {
   return !c.author.anonymous && c.author.name ? c.author.name : `Anonymous ${c.author.sessionId.replace(/-/g, '').slice(0, 4)}`;
 }
 
-export function slackMessage(comments: StoredComment[], inbox: string): { text: string } {
-  const head = `*${comments.length} new Grabby comment${comments.length === 1 ? '' : 's'}* · <${inbox}|Open the inbox>`;
+/** `inbox` is null when the collector doesn't know its own trusted address; messages then carry no links. */
+export function slackMessage(comments: StoredComment[], inbox: string | null): { text: string } {
+  const head = `*${comments.length} new Grabby comment${comments.length === 1 ? '' : 's'}*${inbox ? ` · <${inbox}|Open the inbox>` : ''}`;
   const lines = comments.slice(0, 10).map((c) =>
-    `• ${slackEscape(c.page.route)} · ${slackEscape(who(c))}: ${slackEscape(oneLine(c.comment, 140))} (<${inbox}#c=${c.id}|view>)`);
+    `• ${slackEscape(c.page.route)} · ${slackEscape(who(c))}: ${slackEscape(oneLine(c.comment, 140))}${inbox ? ` (<${inbox}#c=${c.id}|view>)` : ''}`);
   if (comments.length > 10) lines.push(`…and ${comments.length - 10} more`);
   return { text: [head, ...lines].join('\n') };
 }
 
-export function webhookPayload(comments: StoredComment[], inbox: string) {
+export function webhookPayload(comments: StoredComment[], inbox: string | null) {
   return {
     type: 'grabby.comments',
     version: 1,
@@ -55,7 +56,7 @@ export function webhookPayload(comments: StoredComment[], inbox: string) {
     inboxUrl: inbox,
     comments: comments.slice(0, 50).map((c) => ({
       id: c.id,
-      url: `${inbox}#c=${c.id}`,
+      url: inbox ? `${inbox}#c=${c.id}` : null,
       route: c.page.route,
       author: who(c),
       comment: oneLine(c.comment, 280),
@@ -83,7 +84,7 @@ async function post(url: string, body: unknown, log: (m: string) => void): Promi
   }
 }
 
-export async function sendAlerts(targets: AlertTargets, comments: StoredComment[], inbox: string, log: (m: string) => void): Promise<boolean> {
+export async function sendAlerts(targets: AlertTargets, comments: StoredComment[], inbox: string | null, log: (m: string) => void): Promise<boolean> {
   const sends: Array<Promise<boolean>> = [];
   if (targets.slack && isSlackWebhook(targets.slack)) sends.push(post(targets.slack, slackMessage(comments, inbox), log));
   if (targets.webhook && isHttpsUrl(targets.webhook)) sends.push(post(targets.webhook, webhookPayload(comments, inbox), log));
@@ -98,7 +99,7 @@ export async function sendAlerts(targets: AlertTargets, comments: StoredComment[
 export async function scheduleAlert(opts: {
   storage: Storage;
   targets: () => Promise<AlertTargets>;
-  inbox: string;
+  inbox: string | null;
   delayMs: number;
   waitUntil: (work: Promise<unknown>) => void;
   log: (m: string) => void;

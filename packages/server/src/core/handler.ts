@@ -75,11 +75,29 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
   const readLimit = new RateLimiter(240);
   const fallbackWaitUntil = deps.waitUntil ?? ((work: Promise<unknown>) => { work.catch(() => {}); });
 
-  /** Where this collector is reachable, for links in alerts and the inbox. */
+  /** Where this collector is reachable, for links in the inbox-token reply (an admin call). */
   function baseUrl(peer: Peer): string {
     if (deps.publicUrl) return trimTrailingSlashes(deps.publicUrl);
     if (peer.origin) return peer.origin;
     return `${config.public ? 'https' : 'http'}://${peer.host}`;
+  }
+
+  const PUBLIC_URL_SETTING = 'publicUrl';
+  const HOST_SHAPE = /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/;
+
+  /**
+   * The address alert links point at. Never the Host header of the request
+   * that triggered the alert: anyone with the public key could forge it and
+   * turn the owner's Slack link into a phishing link. Trusted sources only:
+   * GRABBY_PUBLIC_URL, the runtime's own URL (Workers only get requests for
+   * their real hostname), a local collector's checked loopback Host, or the
+   * address recorded during an authenticated admin call.
+   */
+  async function alertBase(peer: Peer): Promise<string | null> {
+    if (deps.publicUrl) return trimTrailingSlashes(deps.publicUrl);
+    if (peer.origin) return peer.origin;
+    if (!config.public) return `http://${peer.host}`;
+    return storage.getSetting(PUBLIC_URL_SETTING);
   }
 
   async function alertTargets(): Promise<AlertTargets> {
@@ -171,8 +189,9 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
     log(`[grabby] ${result === 'created' ? 'comment' : 'update'} from ${forLog(who)} on ${forLog(stored.page.route)}`);
     if (result === 'created') {
       const waitUntil = ctx.peer.waitUntil ?? fallbackWaitUntil;
+      const base = await alertBase(ctx.peer);
       waitUntil(scheduleAlert({
-        storage, targets: alertTargets, inbox: `${baseUrl(ctx.peer)}/inbox`,
+        storage, targets: alertTargets, inbox: base ? `${base}/inbox` : null,
         delayMs: deps.alertDelayMs ?? 20_000, waitUntil, log,
       }).catch((err) => log(`[grabby] alert failed: ${forLog((err as Error).message)}`)));
     }
@@ -298,6 +317,10 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
   route('POST', '/v1/admin/inbox-token', adminRoute(async (ctx) => {
     const token = randomToken('ik', 24);
     await storage.setSetting('inbox.tokenHash', await sha256Hex(token));
+    // An admin just reached us at this address; remember it for alert links.
+    if (config.public && !deps.publicUrl && !ctx.peer.origin && HOST_SHAPE.test(ctx.peer.host)) {
+      await storage.setSetting(PUBLIC_URL_SETTING, `https://${ctx.peer.host}`);
+    }
     return json(200, { token, url: `${baseUrl(ctx.peer)}/inbox#k=${token}` });
   }));
 
@@ -333,7 +356,8 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
       target: { kind: 'action', tag: 'button', component: null, source: null, stack: [], selector: '', preview: '', facts: {}, extra: {} },
       framework: 'HTML',
     } as StoredComment;
-    const sent = await sendAlerts(await alertTargets(), [sample], `${baseUrl(ctx.peer)}/inbox`, log);
+    const base = await alertBase(ctx.peer);
+    const sent = await sendAlerts(await alertTargets(), [sample], base ? `${base}/inbox` : null, log);
     return sent ? json(200, { ok: true }) : json(400, { error: 'No alert target is set, or it did not accept the message' });
   }));
 

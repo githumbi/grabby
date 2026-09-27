@@ -151,7 +151,7 @@ describe('alerts', () => {
     const work: Promise<unknown>[] = [];
     const handle = createHandler(config(), {
       storage, log: () => {}, alertDelayMs: 20, waitUntil: (p) => { work.push(p); },
-      alerts: { slack: 'https://hooks.slack.com/services/T/B/x' },
+      alerts: { slack: 'https://hooks.slack.com/services/T/B/x' }, publicUrl: 'https://collector.example/',
     });
     const post = (c: unknown) => handle(req('POST', '/v1/comments', {
       headers: { origin: SITE, 'x-grabby-key': PK, 'content-type': 'application/json' }, body: JSON.stringify({ comment: c }),
@@ -171,6 +171,32 @@ describe('alerts', () => {
     while (work.length) await Promise.all(work.splice(0));
     expect(sent).toHaveLength(2);
     expect(String(sent[1].body.text)).toContain('*1 new Grabby comment*');
+  });
+
+  it('never builds alert links from a forged Host header', async () => {
+    const storage = new MemoryStorage();
+    const work: Promise<unknown>[] = [];
+    const handle = createHandler(config(), {
+      storage, log: () => {}, alertDelayMs: 0, waitUntil: (p) => { work.push(p); },
+      alerts: { slack: 'https://hooks.slack.com/services/T/B/x' },
+    });
+    const forged: Peer = { ip: '203.0.113.66', loopback: false, host: 'evil.example' };
+    const postAs = (peer: Peer) => handle(req('POST', '/v1/comments', {
+      headers: { origin: SITE, 'x-grabby-key': PK, 'content-type': 'application/json' }, body: JSON.stringify({ comment: incoming() }),
+    }), peer);
+    const settle = async () => { while (work.length) await Promise.all(work.splice(0)); };
+
+    await postAs(forged);
+    await settle();
+    expect(String(sent[0].body.text)).not.toContain('evil.example');
+    expect(String(sent[0].body.text)).not.toContain('<http');
+
+    // Once an admin has reached the collector (share does this), links use that address.
+    await handle(req('POST', '/v1/admin/inbox-token', { headers: { authorization: `Bearer ${SK}` } }), { ...REMOTE, host: 'feedback.shop.example' });
+    await postAs(forged);
+    await settle();
+    expect(String(sent[1].body.text)).toContain('https://feedback.shop.example/inbox#c=');
+    expect(String(sent[1].body.text)).not.toContain('evil.example');
   });
 
   it('posts a generic JSON payload to other webhooks', async () => {
