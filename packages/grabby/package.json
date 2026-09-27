@@ -1,6 +1,6 @@
 {
   "name": "@githumbi/grabby",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Point at any UI element, leave a comment, and hand the feedback to an AI coding agent. Works with React, Angular, Vue, Svelte and plain HTML.",
   "keywords": [
     "grabby",
