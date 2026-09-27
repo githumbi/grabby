@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
 import { createInterface } from 'readline';
 import { detectStack, type Stack } from '../utils/detect-stack';
@@ -55,7 +55,7 @@ async function ask(question: string): Promise<string> {
 }
 
 /** The file the loader tag goes in, and how to write it there. */
-export function siteTarget(stack: Stack): { file: string; kind: 'html' | 'jsx' | 'next-app' } | null {
+export function siteTarget(stack: Stack): { file: string; kind: 'html' | 'astro' | 'jsx' | 'next-app' } | null {
   const first = (files: string[]) => files.map((f) => join(stack.root, f)).find((f) => existsSync(f));
   if (stack.framework === 'next') {
     const layout = first(['app/layout.tsx', 'app/layout.jsx', 'app/layout.js', 'src/app/layout.tsx', 'src/app/layout.jsx', 'src/app/layout.js']);
@@ -63,17 +63,56 @@ export function siteTarget(stack: Stack): { file: string; kind: 'html' | 'jsx' |
     const doc = first(['pages/_document.tsx', 'pages/_document.jsx', 'pages/_document.js', 'src/pages/_document.tsx', 'src/pages/_document.jsx', 'src/pages/_document.js']);
     return doc ? { file: doc, kind: 'jsx' } : null;
   }
+  if (stack.framework === 'astro') {
+    // The layout that renders <body>: use it only when exactly one does.
+    const withBody = astroFiles(join(stack.root, 'src', 'layouts')).filter((f) => readFileSync(f, 'utf8').includes('</body>'));
+    return withBody.length === 1 ? { file: withBody[0], kind: 'astro' } : null;
+  }
   // Vite apps, Angular, SvelteKit, CRA and plain sites all have one HTML shell.
   const html = first(['index.html', 'src/index.html', 'public/index.html', 'src/app.html']);
   return html ? { file: html, kind: 'html' } : null;
 }
 
-async function collector(server: string, path: string, token: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${server}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
-    signal: AbortSignal.timeout(15_000),
+/** How long to keep retrying while a freshly deployed Worker reaches all of Cloudflare. */
+let settleMs = 90_000;
+/** For tests. */
+export function setSettleTime(ms: number): void { settleMs = ms; }
+
+/**
+ * A call to the collector. A Worker that was deployed seconds ago isn't on
+ * every Cloudflare server yet: some answer with their own 404 page (not the
+ * collector's JSON) or a 5xx, or the request fails. Those are retried for a
+ * while; the collector's own answers are returned as they are.
+ */
+function astroFiles(dir: string, depth = 0): string[] {
+  if (depth > 3 || !existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) return astroFiles(full, depth + 1);
+    return e.name.endsWith('.astro') ? [full] : [];
   });
+}
+
+async function collector(server: string, path: string, token: string, init: RequestInit = {}): Promise<Response> {
+  const deadline = Date.now() + settleMs;
+  for (;;) {
+    let res: Response | null = null;
+    try {
+      res = await fetch(`${server}${path}`, {
+        ...init,
+        headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}) },
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (err) {
+      if (Date.now() >= deadline) throw err;
+    }
+    if (res) {
+      const fromCollector = (res.headers.get('content-type') ?? '').includes('application/json');
+      const notReadyYet = res.status >= 500 || (res.status === 404 && !fromCollector);
+      if (!notReadyYet || Date.now() >= deadline) return res;
+    }
+    await new Promise((r) => setTimeout(r, Math.min(3000, Math.max(50, settleMs / 30))));
+  }
 }
 
 async function resolveOrigins(stack: Stack, saved: ProjectConfig | null, options: ShareOptions): Promise<string[]> {
@@ -206,6 +245,13 @@ export async function share(options: ShareOptions = {}): Promise<void> {
     }
   }
 
+  // Save now: if anything below fails, a re-run still has the admin token.
+  writeProjectConfig(stack.root, {
+    version: 1, server, projectKey, adminToken, origins, deploy,
+    ...(saved?.inbox && saved.server === server ? { inbox: saved.inbox } : {}),
+  });
+  const gitignoreChanged = ensureGitignore(stack.root);
+
   // 2. The private inbox link: keep a working one, unless asked to replace it.
   let inbox = saved?.inbox && saved.server === server && !options.rotate ? saved.inbox : undefined;
   if (inbox) {
@@ -215,7 +261,9 @@ export async function share(options: ShareOptions = {}): Promise<void> {
   }
   if (!inbox) {
     const res = await collector(server, '/v1/admin/inbox-token', adminToken, { method: 'POST' });
-    if (!res.ok) throw new Error(`could not create the inbox link (${res.status})`);
+    if (!res.ok) {
+      throw new Error(`could not create the inbox link (${res.status}). Your collector and settings are saved; run \`npx @githumbi/grabby share\` again in a minute`);
+    }
     inbox = ((await res.json()) as { url?: unknown }).url as string;
     // Only keep a link to the collector we just talked to.
     let sameCollector = false;
@@ -245,7 +293,7 @@ export async function share(options: ShareOptions = {}): Promise<void> {
 
   // 5. Settings, for pull / inbox / MCP.
   writeProjectConfig(stack.root, { version: 1, server, projectKey, adminToken, inbox, origins, deploy });
-  if (ensureGitignore(stack.root)) log(`${c.green('✓')} .gitignore (added .grabby/)`);
+  if (gitignoreChanged) log(`${c.green('✓')} .gitignore (added .grabby/)`);
   log(`${c.green('✓')} .grabby/config.json`);
   if (!options.noMcp) await addMcp({ cwd: stack.root, quiet: true });
 
