@@ -1,6 +1,6 @@
 {
   "name": "@githumbi/grabby-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Self-hosted collector and MCP server for Grabby feedback comments",
   "author": "Githumbi <githumbi74@gmail.com>",
   "license": "MIT",
