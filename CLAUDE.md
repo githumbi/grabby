@@ -51,11 +51,14 @@ The `grabby share` CLI (`packages/grabby/src/cli/commands/share.ts`) runs the se
 
 ## State (2026-09-27)
 
-Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all five milestones: the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector (with **Finish review**), and packaging, CI and docs. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`). PR #9 added supply-chain hardening (see `SECURITY.md`). PR #13 rewrote the README (see below). 206 tests.
+Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all five milestones: the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector (with **Finish review**), and packaging, CI and docs. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`). PR #9 added supply-chain hardening (see `SECURITY.md`). PR #13 rewrote the README (see below).
+
+**0.2.0** (PR #22, `27eec19`) made customer and stakeholder feedback the main path: `npx @githumbi/grabby share` puts the collector in the developer's own Cloudflare account (Worker + D1) or connects `--server`, patches the site (Next.js layouts included), and saves a gitignored `.grabby/config.json`. It also added the web inbox (`/inbox#k=ik_…`), Slack/webhook alerts, flag-free `pull`/MCP, a 14-day outbox retry and the `--public` host fix. The collector was split into a runtime-neutral core with Node and Worker adapters (see "The collector" above). 255 tests.
+
+Verified for real on the procurement portal (Next.js on Netlify, `~/Documents/KCB work/procurement-portal`): sign-in, D1 creation, deploy, layout patching, comments with screenshots in the inbox, then an upgrade from a local build to the released 0.2.0 with the same links. Its collector is `https://grabby-procurement-portal.githumbi74.workers.dev`.
 
 **On npm** (org `githumbi`, owned by npm user `thumbi74`):
-- `@githumbi/grabby` **0.1.2**, published by `release.yml` with provenance. 0.1.1 was the first automated release; 0.1.0 was published by hand.
-- `@githumbi/grabby-server` **0.1.0**.
+- `@githumbi/grabby` **0.2.0** and `@githumbi/grabby-server` **0.2.0**, published by `release.yml` with provenance (Version packages PR #23, `8112a21`). They're linked in `.changeset/config.json`, so they move together. 0.1.1 was the first automated release; 0.1.0 was published by hand.
 - Both packages use GitHub Actions trusted publishing, and tokens are disallowed. On npmjs.com each trusted publisher's **Allowed actions** must include direct `npm publish`: new ones are stage-only by default, which fails with E403 "OIDC permission denied".
 
 **Supply chain.** Keep these intact:
@@ -66,12 +69,14 @@ Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all 
 - **Dependabot** has a 7-day cooldown (30 days for majors), and each major update gets its own PR. `@angular/*` majors and `@angular-devkit/*` minors and majors are ignored: devkit is versioned `0.MMmm.p`, so a new Angular release arrives as a minor, and it must move together with `@angular/build`.
 - **The CLI pins exact versions** in everything it generates (`src/cli/versions.ts` gets them from `build-constants.ts` via tsup `define`).
 - **Always write `npx @githumbi/grabby …`, never `npx grabby`.** `grabby` on npm is an unrelated package from another maintainer.
+- **Wrangler** is pinned in `packages/server/src/deploy/cloudflare.ts` (`WRANGLER_VERSION`, currently 4.135.0) and run through `npx` with install scripts off. Only move it to a version at least 7 days old, and re-test a real `share` deploy when you do.
 
 **Releasing:**
 1. Add a changeset to each PR that changes a published package.
 2. After a merge, `release.yml` pushes `changeset-release/main`. Its "create PR" step fails because the repo doesn't let Actions open PRs (kept off on purpose; a PR opened with the workflow token wouldn't run CI anyway).
 3. Open the "Version packages" PR from that branch by hand. Check the branch first with `gh api repos/githumbi/grabby/compare/main...changeset-release/main`: it should be 1 commit ahead and 0 behind.
 4. Merging it publishes the new version. Afterwards, confirm it on npm (the registry can lag a few minutes; use `npm install --prefer-online`) and run `npm audit signatures`.
+5. The repository doesn't allow auto-merge, so PRs are merged by hand, and only when the user says so.
 
 **`main` is protected:**
 - Changes only through a PR.
@@ -85,7 +90,12 @@ Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all 
 
 **GitHub About section:** the description, homepage (the npm page) and topics are set. The old `angular-grab.com` link is gone.
 
-**Local testing:** `~/Documents/.claude/launch.json` has the examples plus `grabby-collector`, which runs the local server build on :3456 with demo keys `pk_demo_local_only` / `sk_demo_local_only_not_secret`. The live page is `http://localhost:5184/live.html?grabby=pk_demo_local_only`.
+**Local testing:** `~/Documents/.claude/launch.json` has the examples plus:
+- `grabby-collector`: the local server build on :3456 with demo keys `pk_demo_local_only` / `sk_demo_local_only_not_secret`. The live page is `http://localhost:5184/live.html?grabby=pk_demo_local_only`.
+- `grabby-inbox-demo`: the same on :3457 with `GRABBY_PUBLIC_URL` set, for trying the inbox (get a link with `POST /v1/admin/inbox-token` and the demo admin token).
+- `grabby-worker-dev`: the Worker bundle under `wrangler dev` on :8787, from a scratch `wrangler.json` (point it at a copy of `packages/server/dist/worker/worker.js`).
+
+To try `share` from source before a release, set `GRABBY_SERVER_BIN` to `packages/server/dist/cli.js`. The tag it writes uses the current version number but hashes of your local build, so fix `data-integrity` to the CDN's hash if you deploy a site with it.
 
 Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; Finish review with the collector going down and coming back; SRI against jsDelivr; strict CSP + Trusted Types with zero violations.
 
@@ -107,8 +117,9 @@ Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with t
 2. Optional:
    - Staged publishing (`npm stage publish` + 2FA approval), so even a compromised CI can't publish.
    - Add `tsc --noEmit` to CI.
-   - Dismiss the by-design CodeQL alert (`js/http-to-file-access`, `cli.ts` `--out`).
+   - Dismiss the by-design CodeQL alerts: `js/http-to-file-access` (`cli.ts` `--out`, and `share` saving the collector's reply) and `js/file-access-to-http` (the CLI sending the saved admin token to the project's own collector). Each is explained on PR #22.
    - Delete the merged `grabby-m1`…`grabby-m5`, `react-support` and old feature branches.
-   - Rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`).
+   - A README screenshot of the inbox (the images in `docs/images/` predate it).
+   - A one-click "Deploy to Cloudflare" button, for people who'd rather not use the CLI.
 
-Backlog: a reviewer deleting an already-sent comment doesn't delete it on the collector; Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.
+Backlog: a reviewer deleting an already-sent comment doesn't delete it on the collector; Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); email alerts; `grabby login <inbox link>` so a teammate's machine can pull without `--rotate-admin`; a hosted MCP endpoint on the collector; tsup → tsdown migration.
