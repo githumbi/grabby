@@ -76,3 +76,75 @@ export function patchAngularAppConfig(code: string): PatchResult {
   const withProvider = `${code.slice(0, at)}provideGrabby(), ${code.slice(at)}`;
   return { status: 'patched', code: insertImport(withProvider, "import { provideGrabby } from '@githumbi/grabby/angular';") };
 }
+
+/** The live-feedback script tag: the loader, pinned and hashed, plus where comments go. */
+export interface LiveTag {
+  src: string;
+  /** SRI for the loader itself. */
+  integrity?: string | null;
+  /** SRI for the full build the loader fetches. */
+  dataIntegrity?: string | null;
+  server: string;
+  projectKey: string;
+}
+
+export type TagStyle = 'html' | 'jsx' | 'next-script';
+
+function tagAttrs(tag: LiveTag, style: TagStyle): string[] {
+  const jsx = style !== 'html';
+  const q = (v: string) => JSON.stringify(v);
+  return [
+    `src=${q(tag.src)}`,
+    ...(tag.integrity ? [`integrity=${q(tag.integrity)}`, jsx ? 'crossOrigin="anonymous"' : 'crossorigin="anonymous"'] : []),
+    ...(tag.dataIntegrity ? [`data-integrity=${q(tag.dataIntegrity)}`] : []),
+    'data-mode="live"',
+    `data-server=${q(tag.server)}`,
+    `data-project-key=${q(tag.projectKey)}`,
+    style === 'next-script' ? 'strategy="afterInteractive"' : 'defer',
+  ];
+}
+
+export function renderTag(tag: LiveTag, style: TagStyle, indent = '', name = style === 'next-script' ? 'Script' : 'script'): string {
+  const attrs = tagAttrs(tag, style).map((a) => `${indent}  ${a}`).join('\n');
+  return style === 'next-script' ? `<${name}\n${attrs}\n${indent}/>` : `<${name}\n${attrs}\n${indent}></${name}>`;
+}
+
+/** An existing Grabby loader tag, <script …> or <Script …>, self-closing or not. */
+const EXISTING_TAG = /<(script|Script)\b(?=[^>]*@githumbi\/grabby@[^"'\s>]*\/dist\/loader\.global\.js)[^>]*?(?:\/>|>\s*<\/\1>)/;
+
+function indentAt(code: string, index: number): string {
+  const lineStart = code.lastIndexOf('\n', index - 1) + 1;
+  return /^[ \t]*/.exec(code.slice(lineStart, index))?.[0] ?? '';
+}
+
+/**
+ * Puts the live-feedback loader in a page: rewrites an existing Grabby tag in
+ * place (new version, server or key), or adds one before the only </body>.
+ * `next-app` is an App Router layout (next/script); `jsx` is any other JSX
+ * file with a raw <script> (e.g. pages/_document); `html` is an HTML file.
+ */
+export function patchLoaderTag(code: string, tag: LiveTag, kind: 'html' | 'jsx' | 'next-app'): PatchResult {
+  const existing = EXISTING_TAG.exec(code);
+  if (existing) {
+    const name = existing[1];
+    const style: TagStyle = name === 'Script' ? 'next-script' : kind === 'html' ? 'html' : 'jsx';
+    const next = renderTag(tag, style, indentAt(code, existing.index), name);
+    if (next === existing[0]) return { status: 'already' };
+    return { status: 'patched', code: code.slice(0, existing.index) + next + code.slice(existing.index + existing[0].length) };
+  }
+
+  const bodies = code.split('</body>').length - 1;
+  if (bodies !== 1) return { status: 'unrecognised', reason: bodies ? 'more than one </body>' : 'no </body> found' };
+  const at = code.indexOf('</body>');
+  const indent = `${indentAt(code, at)}  `;
+
+  if (kind !== 'next-app') {
+    const withTag = `${code.slice(0, at)}  ${renderTag(tag, kind, indent)}\n${indentAt(code, at)}${code.slice(at)}`;
+    return { status: 'patched', code: withTag };
+  }
+
+  const imported = /import\s+(\w+)\s+from\s+['"]next\/script['"]/.exec(code);
+  const name = imported?.[1] ?? 'Script';
+  const withTag = `${code.slice(0, at)}  ${renderTag(tag, 'next-script', indent, name)}\n${indentAt(code, at)}${code.slice(at)}`;
+  return { status: 'patched', code: imported ? withTag : insertImport(withTag, 'import Script from "next/script";') };
+}

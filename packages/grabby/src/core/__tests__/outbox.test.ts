@@ -102,4 +102,35 @@ describe('outbox', () => {
     expect(JSON.parse(localStorage.getItem('grabby:v1:outbox')!)).toHaveLength(1);
     outbox.dispose();
   });
+
+  it('keeps retrying for two weeks, then gives up', async () => {
+    const c = makeComment();
+    respond = () => 503;
+    const started = Date.now();
+    localStorage.setItem('grabby:v1:outbox', JSON.stringify([{ id: c.id, kind: 'comment', attempts: 50, next: 0, created: started - 13 * 86_400_000 }]));
+    const first = setup(c);
+    await new Promise((r) => setTimeout(r, 600));
+    expect(first.states).toEqual(['pending']); // day 13: still trying, whatever the attempt count
+    first.outbox.dispose();
+
+    const saved = JSON.parse(localStorage.getItem('grabby:v1:outbox')!);
+    saved[0].created = started - 15 * 86_400_000;
+    localStorage.setItem('grabby:v1:outbox', JSON.stringify(saved));
+    const second = setup(c);
+    await new Promise((r) => setTimeout(r, 600));
+    expect(second.states).toEqual(['failed']);
+    expect(localStorage.getItem('grabby:v1:outbox')).toBeNull();
+    second.outbox.dispose();
+  });
+
+  it('gives queues saved by older versions a fresh two weeks', async () => {
+    const c = makeComment();
+    respond = () => 503;
+    localStorage.setItem('grabby:v1:outbox', JSON.stringify([{ id: c.id, kind: 'comment', attempts: 19, next: 0 }]));
+    const { outbox, states } = setup(c);
+    await new Promise((r) => setTimeout(r, 600));
+    expect(states).toEqual(['pending']);
+    expect(JSON.parse(localStorage.getItem('grabby:v1:outbox')!)[0].created).toBeGreaterThan(Date.now() - 5_000);
+    outbox.dispose();
+  });
 });

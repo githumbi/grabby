@@ -8,10 +8,10 @@ pnpm 9 workspace + Turbo, Node 20+.
 
 | Path | What |
 |---|---|
-| `packages/grabby` | `@githumbi/grabby`: browser toolbar, capture, framework adapters, build plugin, CLI (`grabby init`, `add mcp`, `pull`) |
-| `packages/server` | `@githumbi/grabby-server`: self-hosted collector (`init`/`start`/`mcp`/`pull`), JSON file store, REST API, MCP tools |
+| `packages/grabby` | `@githumbi/grabby`: browser toolbar, capture, framework adapters, build plugin, CLI (`init`, `share`, `inbox`, `alerts`, `add mcp`, `pull`) |
+| `packages/server` | `@githumbi/grabby-server`: the collector (`init`/`start`/`mcp`/`pull`/`deploy cloudflare`), REST API, inbox, alerts, MCP tools. Runs on Node (JSON file store) and as a Cloudflare Worker (D1) |
 | `examples/*` | `angular-19-app`, `react-vite`, `vue-vite`, `svelte-vite`, `plain-html` (`index.html` local mode, `live.html` live mode) |
-| `scripts/check-size.mjs` | bundle budgets: loader and `/live` ≤ 1 KB gzip, script build ≤ 48 KB |
+| `scripts/check-size.mjs` | bundle budgets: loader and `/live` ≤ 1 KB gzip, script build ≤ 48 KB, Worker (inbox included) ≤ 64 KB |
 
 ```bash
 pnpm install && pnpm build && pnpm test   # all packages + examples
@@ -28,6 +28,18 @@ pnpm --dir examples/react-vite dev        # try it in an app
 - `core/sync/outbox.ts`: delivery to a collector with retries (keepalive, plus a last try on pagehide); `core/live/activation.ts`: `?grabby=<projectKey>` feedback links; `core/toolbar/finish-sheet.ts`: the live **Finish review** summary (Done clears sent comments and keeps the toolbar).
 - `plugin/`: unplugin build plugin (JSX/TSX + Vue SFC stamping, dev-only unless `includeSourceInBuild`).
 - `live.ts` / `core/loader.global.ts`: lazy entry and ~500 B script loader for live sites.
+
+## The collector (packages/server/src)
+
+- `core/`: runtime-neutral. `handler.ts` is `createHandler(config, deps) → (Request, Peer) → Response` with every route and check (keys, origins, CORS, Host, rate limits, session-bound screenshots, inbox and admin routes). `storage.ts` is the async `Storage` interface; `memory-storage.ts` the reference. `alerts.ts` batches Slack/webhook alerts (claim in storage, send in `waitUntil`). Web APIs only: no `Buffer`, `fs` or `node:*` in `core/`.
+- `node/`: `bridge.ts` (node:http ↔ Request/Response) and `file-storage.ts` (wraps the JSON `CommentStore`, plus `settings.json`). `http.ts` wires them.
+- `worker/`: `index.ts` (Worker entry, fails closed with 503 until configured) and `d1-storage.ts` (schema created on first use). tsup builds it into one self-contained `dist/worker/worker.js`.
+- `deploy/cloudflare.ts`: `deployCloudflare()` drives Wrangler (`WRANGLER_VERSION`, exact, ≥ 7 days old; bump it on purpose) through a `WranglerRunner` that tests fake. The admin token goes in `--secrets-file`, never argv.
+- `inbox/`: the inbox page (`inbox.ts`, `dom.ts` with `h()`, no `innerHTML`). `scripts/build-inbox.mjs` bundles it into the gitignored `inbox/generated.ts` before build, test and typecheck; run `pnpm typecheck` there, since `tsc` alone needs the generated file.
+- `project-config.ts`: reads `<project>/.grabby/config.json` (written by `grabby share`), so `pull`/`mcp` need no flags.
+- Storage behaviour is pinned by `core/__tests__/storage-contract.ts`, run against memory, file and D1 (on `node:sqlite`, Node ≥ 22.5).
+
+The `grabby share` CLI (`packages/grabby/src/cli/commands/share.ts`) runs the server package for the deploy step; set `GRABBY_SERVER_BIN=<path to packages/server/dist/cli.js>` to use a local build instead of the pinned npm release.
 
 ## Rules
 
@@ -68,7 +80,7 @@ Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all 
 - Admins included; no force-push or deletion.
 
 **README** (`README.md`, copied to `packages/grabby/README.md` at build):
-- Structure: a "Two ways to use it" table, then Developer mode (install, leave comments, hand them to your agent) and Live feedback (collector, script tag, feedback link, pull).
+- Structure: customer/stakeholder feedback first (intro, How it works, "Get feedback on your live site" step by step with `share`, Everyday tasks, Troubleshooting, own server, tag by hand), then What gets captured and Connect your AI agent, then **Developer mode** near the end, then framework, configuration and security reference. Keep that order: live feedback is the product's main use.
 - Screenshots: 7 in `docs/images/`, linked by absolute `raw.githubusercontent.com/githumbi/grabby/main/docs/images/…` URLs so they also render on npm. They were captured from the running examples (React on :5181, plain-html `live.html` with the collector on :3456) by puppeteer-core driving Brave, headless with a throwaway profile, at 1200×640 and deviceScaleFactor 2. The script wasn't committed.
 
 **GitHub About section:** the description, homepage (the npm page) and topics are set. The old `angular-grab.com` link is gone.

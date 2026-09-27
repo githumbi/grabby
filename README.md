@@ -1,34 +1,230 @@
 # Grabby
 
-**Point at any part of your UI, say what should change, and hand it to your AI coding agent.**
+**Let your customers and stakeholders comment on your live website, and hand their feedback straight to your AI coding agent.**
+
+<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-welcome.png" alt="A live site opened with a Grabby feedback link: a short tip explains Comment, click, type, and the toolbar shows a Comment button" width="820"></p>
+
+Send a client, tester or stakeholder a link to your site. They click **Comment**, click anything on the page, and type what should change. No account, no install. Every comment arrives with a screenshot, who left it, the page, and where that element lives in your code (component and `file:line`). You read it all in a private inbox, get a Slack message when new feedback comes in, and pass it to Claude, Cursor, Copilot or ChatGPT with one click, or let your agent read it directly.
+
+Setting it up is one command, and it works with Next.js, React, Vue, Svelte, Angular and plain HTML sites, wherever they're hosted.
+
+- [Get feedback on your live site](#get-feedback-on-your-live-site): step by step
+- [Read and act on feedback](#4-read-the-feedback)
+- [Troubleshooting](#troubleshooting)
+- [What gets captured](#what-gets-captured)
+- [Connect your AI agent](#connect-your-ai-agent)
+- [Developer mode: comment on your own app while you build](#developer-mode-comment-on-your-own-app-while-you-build)
+- [Framework support](#framework-support) · [Configuration](#configuration) · [Security and privacy](#security-and-privacy)
+
+## How it works
+
+```text
+ Reviewer on your site  ──comment + screenshot──▶  Collector in your Cloudflare account
+ (?grabby= link)                                    (free, always on, permanent address)
+                                                            │
+                           ┌────────────────────────────────┼──────────────────────────┐
+                           ▼                                ▼                          ▼
+                    Your private inbox               Your AI agent               Slack (optional)
+                    (web page, any device)           (pull or MCP)
+```
+
+- **Visitors see nothing.** The script is a loader under 500 bytes. The toolbar only appears for someone who opens your feedback link.
+- **Feedback keeps arriving while your computer is off.** The collector runs in your own Cloudflare account, on the free plan, and the comments stay there.
+- **You never touch servers or keys.** `npx @githumbi/grabby share` sets up the collector, edits your site, and saves the settings.
+
+## Get feedback on your live site
+
+### Before you start
+
+- **Node.js 20 or newer** on your computer (`node -v` shows your version).
+- **Your site's project folder**, and a way to deploy it (Netlify, Vercel, GitHub Pages, your own server… anything works).
+- **A free Cloudflare account.** You don't need one beforehand: the first time, setup opens the sign-up page for you. No credit card.
+
+### 1. Run one command in your project folder
+
+```bash
+npx @githumbi/grabby share
+```
+
+It asks for your site's address once (for example `https://my-app.netlify.app`), shows what it's about to do, and asks you to confirm. Then:
+
+1. **The first time only, a browser window opens to sign in to Cloudflare.** Sign in (or create a free account) and click **Allow**. You can close that tab afterwards.
+2. **The first time only, if your Cloudflare account is new, the terminal asks you to pick a `workers.dev` subdomain.** Answer `Y` and type a name, such as your name or company. It becomes part of your collector's address: `https://grabby-my-app.<your-name>.workers.dev`.
+3. **It sets up the collector** in your Cloudflare account. This takes about 30 seconds.
+4. **It adds the Grabby script to your site**: `app/layout.tsx` (or `src/app/layout.tsx`) in Next.js, `index.html` in Vite, Angular, SvelteKit and plain HTML sites. If it can't find the right file, it prints the tag for you to paste before `</body>`.
+5. **It saves its settings** in `.grabby/config.json`, which is private and added to `.gitignore`, and lets your AI agent read feedback through `.mcp.json`.
+
+It finishes with everything you need:
+
+```text
+[grabby] Grabby is ready.
+
+  1. Commit and deploy your site as usual (app/layout.tsx changed).
+  2. Send reviewers this link. They click Comment, pick anything, and type:
+       https://my-app.netlify.app/?grabby=pk_…
+  3. Read feedback in your private inbox (bookmark it; don't share it):
+       https://grabby-my-app.you.workers.dev/inbox#k=ik_…
+     or hand it to your AI agent: npx @githumbi/grabby pull
+```
+
+### 2. Deploy your site
+
+Commit the changed files and deploy as you normally do:
+
+```bash
+git add . && git commit -m "Add Grabby feedback" && git push
+```
+
+That's the last time you need to change your site for Grabby.
+
+### 3. Send reviewers the feedback link
+
+It's your site's address with `?grabby=` and your project key on the end. `share` prints it. Any page works, so you can send people straight to the screen you want feedback on:
+
+```text
+https://my-app.netlify.app/pricing?grabby=pk_…
+```
+
+Reviewers get a **Comment** button and a short three-step tip:
+
+1. Click **Comment**.
+2. Click the part of the page they want to talk about.
+3. Type what should change and press **Enter**.
+
+After their first comment, Grabby asks who it's from: a name, or **Post anonymously**. The choice is remembered, and anonymous reviewers still get a stable id, so you can tell "Anonymous 3f9a" from "Anonymous b21c". If your app already knows who's signed in, skip the question with `grabby.identify({ id, name })`.
+
+<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-identity.png" alt="After a comment, Grabby asks: Thanks! Who is this from? with a name field, Post anonymously and Post" width="820"></p>
+
+Each comment is sent as soon as it's saved. It's kept in the reviewer's browser first and retried for up to two weeks, so a bad connection doesn't lose it, and closing the tab with an unsent comment brings up the browser's "Leave site?" prompt. When they're done, **Finish review** shows what reached you; **Done** clears their list for another round.
+
+<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-finish.png" alt="The Finish review summary: Your comment was sent to the team, with Keep reviewing and Done; the toolbar shows 1 sent" width="820"></p>
+
+### 4. Read the feedback
+
+**In your inbox.** Open the private link from `share` (or run `npx @githumbi/grabby inbox`). You'll see every comment with:
+
+- its screenshot (click to enlarge),
+- who left it, the page and when,
+- the element and where it lives in your code, such as `PlanCard` in `src/PlanCard.tsx:15`.
+
+Mark comments **resolved** once they're handled, **delete** them, or click **Copy all for AI** and paste the result into your AI agent. The inbox works on any device, including your phone. Treat the link like a password: anyone with it can read the feedback.
+
+**In your AI agent.** Run:
+
+```bash
+npx @githumbi/grabby pull
+```
+
+It prints every open comment, grouped by file and labelled by author, saves the screenshots to `./.grabby/screenshots/` where your agent can open them, and marks the comments resolved so the next pull only shows new feedback (add `--keep` to leave them open):
+
+```text
+3. Make this button green so it matches our brand
+   - `<button class="cta">Start free trial</button>` (action) Hero
+   - styles: bg #111827 · color #fff · size 16px · weight 600 · padding 14px 22px · radius 10px
+   - screenshot: .grabby/screenshots/9c1f….webp
+   - by Amina (client)
+```
+
+Or skip the copy and paste: `share` set up MCP, so after restarting your editor you can ask your agent to "fix the open Grabby comments".
+
+**In Slack.** Create an [incoming webhook](https://api.slack.com/messaging/webhooks) for a channel, then:
+
+```bash
+npx @githumbi/grabby alerts --slack https://hooks.slack.com/services/…
+```
+
+New feedback is posted within about 20 seconds, one message per burst, each with a link to the comment in your inbox. `--test` sends a test message, `--webhook <url>` sends JSON to any other service, and `--off` stops alerts.
+
+### Everyday tasks
+
+| To… | Run |
+|---|---|
+| Open your inbox | `npx @githumbi/grabby inbox` |
+| Get open comments for your AI agent | `npx @githumbi/grabby pull` |
+| Accept feedback from another address (staging, custom domain) | `npx @githumbi/grabby share --origin https://staging.my-app.com` |
+| Replace the inbox link (if it was shared by mistake) | `npx @githumbi/grabby share --rotate` |
+| Update the collector after upgrading Grabby | `npx @githumbi/grabby share` |
+| Turn Slack alerts on or off | `npx @githumbi/grabby alerts --slack <webhook>` / `--off` |
+| Set up on a new computer (the settings aren't in git) | `npx @githumbi/grabby share --rotate-admin` |
+
+Running `share` again is always safe: it keeps your feedback link, your inbox link and your comments.
+
+### Troubleshooting
+
+- **Reviewers see "not sent".** The site can't reach the collector. Check that your latest deploy includes the Grabby script, and that the address in the browser matches the one you gave `share`. Staging sites and custom domains each need adding: `share --origin <address>`. Unsent comments are retried for two weeks, so they arrive once it's fixed.
+- **No Comment button appears.** Make sure the link ends in `?grabby=` followed by the key `share` printed, and that the deployed page contains the Grabby `<script>`.
+- **The Cloudflare sign-in didn't open, or you're on a server without a browser.** Create an API token in the Cloudflare dashboard and run `share` with `CLOUDFLARE_API_TOKEN=… npx @githumbi/grabby share`. If you belong to several Cloudflare accounts, also set `CLOUDFLARE_ACCOUNT_ID`.
+- **A company network blocks `*.workers.dev`.** Some corporate networks do. Test from another network, or [run the collector on your own server](#run-the-collector-on-your-own-server-instead) under your company's domain.
+- **`share` couldn't find where to add the script.** It prints the tag instead; see [Adding the script by hand](#adding-the-script-by-hand).
+
+### Run the collector on your own server instead
+
+Prefer not to use Cloudflare? The collector is also a small Node server with no database. Run it anywhere Node 20 or Docker runs, behind HTTPS:
+
+```bash
+npx -y @githumbi/grabby-server init --origin https://my-app.com     # prints a project key and an admin token
+GRABBY_PUBLIC_KEY=pk_… GRABBY_ADMIN_TOKEN=sk_… GRABBY_ALLOWED_ORIGINS=https://my-app.com \
+  GRABBY_PUBLIC_URL=https://feedback.my-app.com npx -y @githumbi/grabby-server start --public
+```
+
+Then connect your project to it. This adds the script, the inbox link and the settings, the same as above:
+
+```bash
+npx @githumbi/grabby share --server https://feedback.my-app.com --token sk_…
+```
+
+Docker and other options are in [packages/server](packages/server/README.md).
+
+### Adding the script by hand
+
+`share` prints this tag with your address, key and integrity hashes filled in. Put it before `</body>`:
+
+```html
+<script
+  src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@<version>/dist/loader.global.js"
+  integrity="sha384-…" crossorigin="anonymous" data-integrity="sha384-…"
+  data-mode="live"
+  data-server="https://grabby-my-app.you.workers.dev"
+  data-project-key="pk_…"
+  defer
+></script>
+```
+
+In a Next.js App Router layout, use `<Script … strategy="afterInteractive" />` from `next/script` with the same attributes (`crossOrigin` in JSX). With a bundler you can instead install `@githumbi/grabby` and call `initGrabbyLive({ server, projectKey })` from `@githumbi/grabby/live`.
+
+## What gets captured
+
+Grabby looks at *what kind* of element you clicked and keeps only what matters for it:
+
+| Kind | Captured |
+|---|---|
+| **Action**: button, link, tab | label, href path, state (disabled, expanded, selected), custom styles |
+| **Form field** | label, type, placeholder, required/invalid. **Never the value.** |
+| **Text** | text (up to 120 chars), font size, weight, colour, line height |
+| **Media** | alt text (or that it's missing), file name, rendered vs natural size |
+| **Container / card** | heading, a summary of what's inside ("heading, 3× PlanCard, button"), layout styles |
+| **Page section** | page title, viewport, regions and components on the page. No HTML. |
+
+Every comment also carries the component, source file and line, up to three of *your* components above it (library frames are skipped), a trimmed HTML preview capped at 300 characters, and a screenshot. Styles are compared against browser defaults, so only the values your code set are reported.
+
+The export names the page once, groups comments by file, and skips anything already visible in the preview. **Compact** is one line per comment; **Detailed** adds ancestors, position and all custom styles for tricky layout bugs. Twenty mixed comments fit comfortably under 6k tokens at the default level.
+
+Screenshots are never pasted into the text; they'd crowd out the context window. They stay in the browser (and on your collector, if you use one), and `pull` and MCP give your agent the image file.
+
+## Connect your AI agent
+
+- **Copy all**: paste into any chat or agent.
+- **MCP**: run `npx @githumbi/grabby add mcp` (`share` does this for you). Your agent gets `grabby_list_comments`, `grabby_get_comment` (with the screenshot), `grabby_resolve` and `grabby_stats`. After `share`, it reads your live site's feedback; otherwise it also collects comments locally: set `initGrabby({ server: 'http://localhost:3456' })`.
+- **`pull`**: prints the same export as Copy all, for scripts and terminal agents.
+- **Inbox**: the private web page from `share`, with **Copy all for AI**.
+
+## Developer mode: comment on your own app while you build
+
+The same toolbar also works on your local dev server, for you and your team. Comments stay in your browser and go straight to your AI agent, with exact source locations from a small build plugin. Nothing is added to production builds.
 
 <p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/dev-hover.png" alt="Hovering a button in selection mode: Grabby labels it "button .btn in PlanCard, src/PlanCard.tsx:15"" width="820"></p>
 
-Grabby adds a small toolbar to your app. Click an element, type a comment, and Grabby records where that element lives in your code (component, `file:line`), what it is (a button, a form field, a card…), the few styles that matter, and a screenshot. Collect as many comments as you like, then **Copy all** and paste into Claude, Cursor, Copilot or ChatGPT, or let your agent read them directly over MCP.
-
-## Two ways to use it
-
-| | **Developer mode** | **Live feedback** |
-|---|---|---|
-| Who comments | You (and your team) while building | Clients, testers, stakeholders |
-| Where | Your local dev server | Your deployed site (production or staging) |
-| What visitors see | Nothing: it's left out of production builds | Nothing, unless they open your feedback link |
-| Where comments go | Your browser, then **Copy all** or your agent (MCP) | A small collector you host, then `pull` or MCP |
-| Setup | [Install the package](#developer-mode) | [Run a collector and add one script tag](#live-feedback-on-your-deployed-site) |
-
-You can use both: developer mode day to day, live feedback when someone else needs to review.
-
-- [Developer mode](#developer-mode)
-- [Live feedback on your deployed site](#live-feedback-on-your-deployed-site)
-- [What gets captured](#what-gets-captured)
-- [Connect your AI agent](#connect-your-ai-agent)
-- [Framework support](#framework-support)
-- [Configuration](#configuration)
-- [Security and privacy](#security-and-privacy)
-
-## Developer mode
-
-### 1. Install
+### 1. Install for development
 
 You need Node 20 or newer. In your project folder, run:
 
@@ -117,10 +313,10 @@ useEffect(() => {
 <summary><strong>Any site, no build step</strong></summary>
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1.1/dist/grabby.global.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@<version>/dist/grabby.global.js" defer></script>
 ```
 
-Use an exact version, as above. Running `npx @githumbi/grabby init --dry-run` in an empty folder prints this tag with an `integrity` hash, so a tampered CDN copy won't run.
+Use an exact version, never a range. Running `npx @githumbi/grabby init --dry-run` in an empty folder prints this tag with the current version and an `integrity` hash, so a tampered CDN copy won't run.
 </details>
 
 Start your dev server as usual. The Grabby toolbar appears the first time you press the shortcut.
@@ -168,115 +364,6 @@ That's the whole export: no page dumps, around 150–300 tokens per comment. To 
 | Esc | Cancel, close the panel, or leave selection mode |
 | ⌘/Ctrl+Enter | Copy & clear, in the Copy dialog |
 
-## Live feedback on your deployed site
-
-Collect comments from clients, stakeholders or testers on your real site. Ordinary visitors see nothing and download almost nothing (a loader under 500 bytes). Reviewers open a feedback link, and every comment arrives tagged with who left it.
-
-You'll set up two things: a small **collector** that receives comments, and one **script tag** on your site.
-
-### 1. Run a collector
-
-The collector is a small Node server with no database and no native dependencies. It runs anywhere Node 20 or Docker does: your own server, Fly.io, Render, Railway…
-
-```bash
-npx -y @githumbi/grabby-server@0.1.0 init --origin https://your-site.com
-npx -y @githumbi/grabby-server@0.1.0 start --public
-```
-
-`init` prints two values. Keep them:
-
-- a **project key** (`pk_…`): public, it goes into your site;
-- an **admin token** (`sk_…`): secret, only for you and your agent.
-
-Put the collector behind HTTPS (for example `https://feedback.your-site.com`). Deployment guides for Docker, Fly.io, Render and Railway are in [packages/server](packages/server/README.md).
-
-### 2. Add Grabby to your site
-
-Add this before `</body>`:
-
-```html
-<script
-  src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1.1/dist/loader.global.js"
-  data-mode="live"
-  data-server="https://feedback.your-site.com"
-  data-project-key="pk_…"
-  defer
-></script>
-```
-
-For production, also add integrity hashes so a tampered CDN copy can't run. Run `npx @githumbi/grabby init --live --server https://feedback.your-site.com --key pk_… --dry-run` in an empty folder, and it prints this tag with `integrity` (for the loader) and `data-integrity` (for the full build it fetches) filled in. Always use an exact version, never a range like `@0.1`.
-
-Using a bundler instead? Install `@githumbi/grabby` as a normal dependency and call:
-
-```ts
-import { initGrabbyLive } from '@githumbi/grabby/live';
-
-initGrabbyLive({ server: 'https://feedback.your-site.com', projectKey: 'pk_…' });
-```
-
-### 3. Share the feedback link
-
-Send reviewers your page with `?grabby=` and your project key:
-
-```text
-https://your-site.com/?grabby=pk_…
-```
-
-They get a **Comment** button and a short three-step tip. No account or install needed.
-
-<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-welcome.png" alt="A live site opened with the feedback link: the tip explains Comment, click, type, and the toolbar shows a Comment button" width="820"></p>
-
-After their first comment, Grabby asks who it's from: a name, or **Post anonymously**. The choice is remembered, and anonymous reviewers still get a stable id, so you can tell "Anonymous 3f9a" from "Anonymous b21c". If your app already knows who's signed in, skip the question with `grabby.identify({ id, name })`.
-
-<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-identity.png" alt="After a comment, Grabby asks: Thanks! Who is this from? with a name field, Post anonymously and Post" width="820"></p>
-
-Each comment is sent as soon as it's saved. It's kept in the browser first and retried until it reaches your collector, so a bad connection doesn't lose it, and closing the tab with a half-typed or unsent comment brings up the browser's "Leave site?" prompt. The toolbar shows how many were sent. When reviewers are done, **Finish review** shows what reached you; **Done** clears their list for another round.
-
-<p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-finish.png" alt="The Finish review summary: Your comment was sent to the team, with Keep reviewing and Done; the toolbar shows 1 sent" width="820"></p>
-
-### 4. Pull the feedback into your agent
-
-```bash
-npx -y @githumbi/grabby-server@0.1.0 pull --server https://feedback.your-site.com --token sk_…
-```
-
-This prints every open comment, grouped by file and labelled by author, and saves the screenshots to `./.grabby/screenshots/` where your agent can open them:
-
-```text
-3. Make this button green so it matches our brand
-   - `<button class="cta">Start free trial</button>` (action) Hero
-   - styles: bg #111827 · color #fff · size 16px · weight 600 · padding 14px 22px · radius 10px
-   - screenshot: .grabby/screenshots/9c1f….webp
-   - by Amina (client)
-```
-
-The comments are then marked resolved, so the next pull shows only new feedback. Use `--keep` to leave them open or `--delete` to remove them. Or give your agent the collector over MCP (next section) and ask it to "fix the open Grabby comments".
-
-## What gets captured
-
-Grabby looks at *what kind* of element you clicked and keeps only what matters for it:
-
-| Kind | Captured |
-|---|---|
-| **Action**: button, link, tab | label, href path, state (disabled, expanded, selected), custom styles |
-| **Form field** | label, type, placeholder, required/invalid. **Never the value.** |
-| **Text** | text (up to 120 chars), font size, weight, colour, line height |
-| **Media** | alt text (or that it's missing), file name, rendered vs natural size |
-| **Container / card** | heading, a summary of what's inside ("heading, 3× PlanCard, button"), layout styles |
-| **Page section** | page title, viewport, regions and components on the page. No HTML. |
-
-Every comment also carries the component, source file and line, up to three of *your* components above it (library frames are skipped), a trimmed HTML preview capped at 300 characters, and a screenshot. Styles are compared against browser defaults, so only the values your code set are reported.
-
-The export names the page once, groups comments by file, and skips anything already visible in the preview. **Compact** is one line per comment; **Detailed** adds ancestors, position and all custom styles for tricky layout bugs. Twenty mixed comments fit comfortably under 6k tokens at the default level.
-
-Screenshots are never pasted into the text; they'd crowd out the context window. They stay in the browser (and on your collector, if you use one), and `pull` and MCP give your agent the image file.
-
-## Connect your AI agent
-
-- **Copy all**: paste into any chat or agent.
-- **MCP**: run `npx @githumbi/grabby add mcp`. Your agent gets `grabby_list_comments`, `grabby_get_comment` (with the screenshot), `grabby_resolve` and `grabby_stats`. Locally it also collects comments: set `initGrabby({ server: 'http://localhost:3456' })`. Against a deployed collector, add `--server <url> --token <sk_…>` to the MCP command.
-- **`pull`**: prints the same export as Copy all, for scripts and terminal agents.
-
 ## Framework support
 
 | Stack | Component names | Source location | Setup |
@@ -323,9 +410,10 @@ Mark parts of your page:
 
 - **Form values are never captured.** Neither are hidden inputs, inline event handlers or inline styles. Captured text is scrubbed of email addresses, long numbers (cards, accounts), JWTs and bearer tokens, and routes drop their query string and token-bearing hashes unless you allow a parameter.
 - **The UI is isolated** in a shadow root and built without `innerHTML`, so page CSS can't break it and nothing a user types can run as code. It works under strict CSP (`style-src 'self'`) and Trusted Types.
-- **The collector** stays on localhost unless started with `--public`, and then refuses to start without an admin token, a project key and a list of allowed sites. The public key can only add comments; reading, resolving and deleting need the admin token. Input is validated and size-capped, screenshots are checked by their bytes, only the browser that wrote a comment can attach its screenshot, and requests are rate-limited. Locally, it rejects DNS-rebinding attempts.
+- **The collector** stays on localhost unless started with `--public` (or deployed to Cloudflare), and then refuses to work without an admin token, a project key and a list of allowed sites. The public key can only add comments; reading, resolving and deleting need the admin token or the inbox link. Input is validated and size-capped, screenshots are checked by their bytes, only the browser that wrote a comment can attach its screenshot, and requests are rate-limited. Locally, it rejects DNS-rebinding attempts.
+- **The inbox link** carries its token after `#`, which browsers never send to servers or in Referer headers; the page moves it out of the address bar at once. The token can read and resolve comments but not change settings, and `share --rotate` revokes it. The inbox page is built without `innerHTML` and served with a strict Content-Security-Policy. `.grabby/config.json` holds the admin token: it's owner-only and gitignored, and never written to `.mcp.json`.
 - **Comments are user input.** MCP results tell your agent to treat them as data, not instructions. Review what an agent does with feedback from people you don't know.
-- **Supply chain.** Neither package has install scripts. Everything Grabby generates for you is pinned to an exact version: the `.mcp.json` entry and `grabby pull` run one specific `@githumbi/grabby-server` release (re-run `npx @githumbi/grabby add mcp` after upgrading to move it), and the CDN tag from `@githumbi/grabby init` carries integrity hashes. Releases are built in CI and published with npm trusted publishing and provenance; see [SECURITY.md](SECURITY.md#how-releases-are-protected) for how the repository itself is hardened.
+- **Supply chain.** Neither package has install scripts. Everything Grabby generates for you is pinned to an exact version: the `.mcp.json` entry and `grabby pull` run one specific `@githumbi/grabby-server` release (re-run `npx @githumbi/grabby add mcp` after upgrading to move it), the CDN tag from `share` and `init` carries integrity hashes, and `share` deploys the exact Worker file published to npm, using a pinned Wrangler with install scripts off. Releases are built in CI and published with npm trusted publishing and provenance; see [SECURITY.md](SECURITY.md#how-releases-are-protected) for how the repository itself is hardened.
 
 Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 
@@ -334,7 +422,7 @@ Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
 | | |
 |---|---|
 | [`@githumbi/grabby`](packages/grabby) | The toolbar, framework adapters, build plugin, CLI |
-| [`@githumbi/grabby-server`](packages/server) | Self-hosted collector, MCP server, `pull` |
+| [`@githumbi/grabby-server`](packages/server) | The collector (Cloudflare Worker or Node), inbox, alerts, MCP server, `pull` |
 
 ## Contributing
 

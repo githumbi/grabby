@@ -29,12 +29,18 @@ interface Job {
   kind: 'comment' | 'shot';
   attempts: number;
   next: number;
+  /** When the job was first queued; retries stop GIVE_UP_AFTER_MS later. */
+  created: number;
 }
 
 const STORE_KEY = 'grabby:v1:outbox';
 /** 2s, 10s, 30s, 2m, 5m, then every 10m. */
 const BACKOFF = [2_000, 10_000, 30_000, 120_000, 300_000, 600_000];
-const MAX_ATTEMPTS = 20;
+/**
+ * Keep retrying for two weeks, so a collector that's down for a weekend (or
+ * a laptop collector that's asleep) doesn't cost anyone their feedback.
+ */
+const GIVE_UP_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 /** Browsers cap keepalive bodies at 64 KB in total; stay under it. */
 const KEEPALIVE_MAX = 60_000;
 
@@ -42,7 +48,11 @@ function loadJobs(): Job[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     const jobs = raw ? (JSON.parse(raw) as Job[]) : [];
-    return Array.isArray(jobs) ? jobs.filter((j) => typeof j.id === 'string' && (j.kind === 'comment' || j.kind === 'shot')) : [];
+    if (!Array.isArray(jobs)) return [];
+    return jobs
+      .filter((j) => typeof j.id === 'string' && (j.kind === 'comment' || j.kind === 'shot'))
+      // Queues saved before `created` existed start their two weeks now.
+      .map((j) => (typeof j.created === 'number' ? j : { ...j, created: Date.now() }));
   } catch {
     return [];
   }
@@ -82,7 +92,7 @@ export function createOutbox(deps: OutboxDeps): Outbox {
 
   function add(id: string, kind: Job['kind']): void {
     if (jobs.some((j) => j.id === id && j.kind === kind)) return;
-    jobs.push({ id, kind, attempts: 0, next: 0 });
+    jobs.push({ id, kind, attempts: 0, next: 0, created: Date.now() });
     save();
     schedule(0);
   }
@@ -157,14 +167,14 @@ export function createOutbox(deps: OutboxDeps): Outbox {
         } catch {
           outcome = 'retry'; // offline, DNS, CORS misconfiguration…
         }
-        if (outcome === 'retry' && job.attempts + 1 < MAX_ATTEMPTS) {
+        if (outcome === 'retry' && Date.now() - job.created < GIVE_UP_AFTER_MS) {
           job.attempts += 1;
           job.next = Date.now() + BACKOFF[Math.min(job.attempts - 1, BACKOFF.length - 1)];
           if (job.kind === 'comment') deps.onState(job.id, 'pending');
         } else {
           jobs = jobs.filter((j) => j !== job);
           if (job.kind === 'comment' && outcome === 'done') deps.onState(job.id, 'sent');
-          if (job.kind === 'comment' && outcome === 'retry') deps.onState(job.id, 'failed', 'gave up after repeated failures');
+          if (job.kind === 'comment' && outcome === 'retry') deps.onState(job.id, 'failed', 'could not reach the feedback server for 14 days');
         }
         save();
       }

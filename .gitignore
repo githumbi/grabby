@@ -8,3 +8,5 @@ packages/grabby/README.md
 packages/*/LICENSE
 .grabby/
 .grabby-demo/
+src/inbox/generated.ts
+.grabby-inbox-demo/
