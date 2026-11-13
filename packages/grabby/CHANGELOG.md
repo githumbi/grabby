@@ -1,5 +1,16 @@
 # @githumbi/grabby
 
+## 0.3.0
+
+### Minor Changes
+
+- 5eec68c: Reviewers on a live site now see plain names while choosing what to comment on: `Button "Start free trial" · Click to select`, `Card "Your plan"`, `Text box "Email"`, `Whole page`, instead of the element's tag, classes and source file. Their "Your feedback" list uses the same names. Developer mode is unchanged. Only visible labels, headings, alt text and placeholders are used, never what someone typed, and masked areas show no text.
+
+### Patch Changes
+
+- 45343a4: Typing a "g" in the comment box no longer closes it. The Alt+G shortcut toggled selection mode on the release of any "g" key, so adding or editing a comment vanished mid-word. It now toggles only when the full shortcut was pressed.
+- 45343a4: Deleting a comment that was already sent now deletes it on the feedback server too, so `pull`, the inbox and MCP no longer return it. The delete waits out the 8-second Undo window (Undo cancels it), is retried like any send, and goes out at once if the reviewer leaves the page. The collector accepts it only from the browser session that wrote the comment, with the project key and an allowed site, as for screenshots. Finish review's Done and `clearComments()` still only tidy the reviewer's browser.
+
 ## 0.2.1
 
 ### Patch Changes
