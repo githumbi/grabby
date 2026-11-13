@@ -27,8 +27,8 @@
     "typecheck": "node scripts/build-inbox.mjs && tsc --noEmit -p . && tsc --noEmit -p src/inbox"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^3.25.76"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@githumbi/grabby": "workspace:^",
