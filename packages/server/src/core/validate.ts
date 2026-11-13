@@ -1,5 +1,13 @@
-import { z } from 'zod';
+// zod/mini: same validation as the classic API, but tree-shakable, which keeps
+// the Cloudflare Worker inside its size budget.
+import * as z from 'zod/mini';
+// Just English: z.locales.en() would bundle every language zod ships.
+import { en } from 'zod/locales';
 import type { GrabbyComment } from '@githumbi/grabby/export';
+
+// Readable messages ("Too big: expected string to have <=5000 characters")
+// instead of mini's bare "Invalid input".
+z.config(en());
 
 /*
  * Everything a browser sends is untrusted: anyone who can load the page can
@@ -14,52 +22,71 @@ const MAX_SELECTOR = 500;
 const MAX_FACTS = 16;
 const MAX_STACK = 6;
 
-const str = (max: number) => z.string().transform((s) => s.slice(0, max));
-const nullableStr = (max: number) => z.string().nullable().optional().transform((s) => (s == null ? null : s.slice(0, max)));
-const int = z.number().int().min(0).max(10_000_000).nullable().optional().transform((n) => n ?? null);
+const ID = /^[A-Za-z0-9_-]{8,64}$/;
 
-const factsSchema = z.record(z.string(), z.unknown()).optional().transform((facts) => {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(facts ?? {}).slice(0, MAX_FACTS)) {
-    if (typeof v === 'string' || typeof v === 'number') out[k.slice(0, 40)] = String(v).slice(0, MAX_TEXT);
-  }
-  return out;
-});
+const str = (max: number) => z.pipe(z.string(), z.transform((s: string) => s.slice(0, max)));
+const nullableStr = (max: number) => z.pipe(
+  z.optional(z.nullable(z.string())),
+  z.transform((s: string | null | undefined) => (s == null ? null : s.slice(0, max))),
+);
+const int = z.pipe(
+  z.optional(z.nullable(z.int().check(z.minimum(0), z.maximum(10_000_000)))),
+  z.transform((n: number | null | undefined) => n ?? null),
+);
+const coord = z.int().check(z.minimum(0), z.maximum(100_000));
+
+const factsSchema = z.pipe(
+  z.optional(z.record(z.string(), z.unknown())),
+  z.transform((facts: Record<string, unknown> | undefined) => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(facts ?? {}).slice(0, MAX_FACTS)) {
+      if (typeof v === 'string' || typeof v === 'number') out[k.slice(0, 40)] = String(v).slice(0, MAX_TEXT);
+    }
+    return out;
+  }),
+);
+
+const stackEntry = z.object({ name: str(120), file: nullableStr(MAX_TEXT), line: int });
 
 const commentSchema = z.object({
-  id: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
-  createdAt: z.number().int().positive(),
-  updatedAt: z.number().int().positive().optional(),
-  comment: z.string().trim().min(1).max(MAX_COMMENT),
+  id: z.string().check(z.regex(ID)),
+  createdAt: z.int().check(z.positive()),
+  updatedAt: z.optional(z.int().check(z.positive())),
+  comment: z.string().check(z.trim(), z.minLength(1), z.maxLength(MAX_COMMENT)),
   author: z.object({
     name: nullableStr(80),
     anonymous: z.boolean(),
-    sessionId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+    sessionId: z.string().check(z.regex(ID)),
     userId: nullableStr(120),
   }),
   page: z.object({
     route: str(MAX_TEXT),
-    title: str(200).optional().default(''),
-    viewport: z.tuple([z.number().int().min(0).max(100_000), z.number().int().min(0).max(100_000)]),
+    title: z._default(z.optional(str(200)), ''),
+    viewport: z.tuple([coord, coord]),
   }),
   target: z.object({
     kind: z.enum(['action', 'field', 'text', 'media', 'container', 'section']),
-    tag: z.string().regex(/^[a-z][a-z0-9-]{0,40}$/i),
+    tag: z.string().check(z.regex(/^[a-z][a-z0-9-]{0,40}$/i)),
     component: nullableStr(120),
-    source: z.object({ file: str(MAX_TEXT), line: int, column: int }).nullable().optional().transform((s) => s ?? null),
-    stack: z.array(z.object({ name: str(120), file: nullableStr(MAX_TEXT), line: int })).optional().default([])
-      .transform((s) => s.slice(0, MAX_STACK)),
+    source: z.pipe(
+      z.optional(z.nullable(z.object({ file: str(MAX_TEXT), line: int, column: int }))),
+      z.transform((s: { file: string; line: number | null; column: number | null } | null | undefined) => s ?? null),
+    ),
+    stack: z.pipe(
+      z._default(z.optional(z.array(stackEntry)), []),
+      z.transform((s: Array<z.output<typeof stackEntry>>) => s.slice(0, MAX_STACK)),
+    ),
     selector: str(MAX_SELECTOR),
     preview: str(MAX_PREVIEW),
     facts: factsSchema,
     extra: factsSchema,
   }),
-  framework: str(40).optional().default('HTML'),
+  framework: z._default(z.optional(str(40)), 'HTML'),
 });
 
 export const payloadSchema = z.object({ comment: commentSchema });
 
-export type IncomingComment = z.infer<typeof commentSchema>;
+export type IncomingComment = z.output<typeof commentSchema>;
 
 export function parseCommentPayload(body: unknown):
   | { ok: true; comment: IncomingComment }
