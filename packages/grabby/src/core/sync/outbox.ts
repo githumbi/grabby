@@ -15,6 +15,14 @@ export interface Outbox {
   send(id: string): void;
   /** Queue just the screenshot, for when it's captured after the comment was sent. */
   sendScreenshot(id: string): void;
+  /**
+   * The reviewer deleted a comment: withdraw it from the collector too, so a
+   * pull doesn't hand the team feedback its author took back. Waits `delayMs`
+   * first, so Undo can cancel it without the server ever seeing it.
+   */
+  remove(id: string, sessionId: string, delayMs?: number): void;
+  /** Undo: true when the delete was cancelled before it reached the server. */
+  cancelRemove(id: string): boolean;
   /** Still has work for this comment (the comment itself or its screenshot). */
   isQueued(id: string): boolean;
   /** Retry everything queued now instead of waiting out the backoff. */
@@ -26,7 +34,9 @@ export interface Outbox {
 
 interface Job {
   id: string;
-  kind: 'comment' | 'shot';
+  kind: 'comment' | 'shot' | 'delete';
+  /** Delete jobs only: the comment is gone locally, so its session is kept here. */
+  session?: string;
   attempts: number;
   next: number;
   /** When the job was first queued; retries stop GIVE_UP_AFTER_MS later. */
@@ -50,7 +60,8 @@ function loadJobs(): Job[] {
     const jobs = raw ? (JSON.parse(raw) as Job[]) : [];
     if (!Array.isArray(jobs)) return [];
     return jobs
-      .filter((j) => typeof j.id === 'string' && (j.kind === 'comment' || j.kind === 'shot'))
+      .filter((j) => typeof j.id === 'string' && (j.kind === 'comment' || j.kind === 'shot'
+        || (j.kind === 'delete' && typeof j.session === 'string')))
       // Queues saved before `created` existed start their two weeks now.
       .map((j) => (typeof j.created === 'number' ? j : { ...j, created: Date.now() }));
   } catch {
@@ -122,7 +133,23 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     });
   }
 
+  function deleteComment(id: string, session: string): Promise<Response> {
+    return fetch(`${base}/v1/comments/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'omit',
+      keepalive: true,
+      headers: headers({ 'X-Grabby-Session': session }),
+    });
+  }
+
   async function deliver(job: Job): Promise<'done' | 'retry' | 'drop'> {
+    if (job.kind === 'delete') {
+      const res = await deleteComment(job.id, job.session!);
+      // 404: it never arrived (or was already removed), which is the goal.
+      if (res.ok || res.status === 404) return 'done';
+      if (res.status === 429 || res.status >= 500) return 'retry';
+      return 'drop';
+    }
     const comment = deps.getComment(job.id);
     if (!comment) return 'drop'; // deleted before it was sent
 
@@ -194,6 +221,20 @@ export function createOutbox(deps: OutboxDeps): Outbox {
 
   return {
     send: (id) => add(id, 'comment'),
+    remove(id, sessionId, delayMs = 0) {
+      // Anything still waiting to go out for this comment is moot now.
+      jobs = jobs.filter((j) => j.id !== id);
+      jobs.push({ id, kind: 'delete', session: sessionId, attempts: 0, next: Date.now() + delayMs, created: Date.now() });
+      save();
+      schedule(0); // run() skips it until due, then re-arms for the soonest job
+    },
+    cancelRemove(id) {
+      const job = jobs.find((j) => j.id === id && j.kind === 'delete');
+      if (!job) return false;
+      jobs = jobs.filter((j) => j !== job);
+      save();
+      return job.attempts === 0;
+    },
     sendScreenshot: (id) => {
       // If the comment itself is still queued, it will queue its screenshot.
       if (!jobs.some((j) => j.id === id && j.kind === 'comment')) add(id, 'shot');
@@ -204,10 +245,17 @@ export function createOutbox(deps: OutboxDeps): Outbox {
       // Jobs stay queued: if these don't land, the next visit sends them. A
       // repeat from the same session is an edit on the server, not a duplicate.
       for (const job of jobs) {
+        if (job.kind === 'delete') {
+          // Leaving the page ends the chance to Undo, so don't wait it out.
+          job.attempts += 1;
+          deleteComment(job.id, job.session!).catch(() => {});
+          continue;
+        }
         if (job.kind !== 'comment') continue;
         const comment = deps.getComment(job.id);
         if (comment) postComment(comment).catch(() => {});
       }
+      save();
     },
     dispose() {
       disposed = true;

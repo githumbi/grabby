@@ -103,6 +103,63 @@ describe('outbox', () => {
     outbox.dispose();
   });
 
+  it('withdraws a deleted comment from the server after the undo window', async () => {
+    vi.useFakeTimers();
+    const c = makeComment();
+    const { outbox } = setup(c);
+    outbox.remove(c.id, c.author.sessionId, 8_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(calls).toHaveLength(0); // still undoable
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([`DELETE https://feedback.test/v1/comments/${c.id}`]);
+    expect(calls[0].headers['X-Grabby-Key']).toBe('pk_x');
+    expect(calls[0].headers['X-Grabby-Session']).toBe(c.author.sessionId);
+    expect(outbox.isQueued(c.id)).toBe(false);
+    outbox.dispose();
+  });
+
+  it('Undo cancels the delete before it reaches the server', async () => {
+    vi.useFakeTimers();
+    const c = makeComment();
+    const { outbox } = setup(c);
+    outbox.remove(c.id, c.author.sessionId, 8_000);
+    expect(outbox.cancelRemove(c.id)).toBe(true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(0);
+    outbox.dispose();
+  });
+
+  it('retries a delete the server could not take, treats 404 as done, and persists it', async () => {
+    vi.useFakeTimers();
+    const c = makeComment();
+    respond = () => 503;
+    const { outbox } = setup(c);
+    outbox.remove(c.id, c.author.sessionId, 0);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(JSON.parse(localStorage.getItem('grabby:v1:outbox')!)[0]).toMatchObject({ id: c.id, kind: 'delete', session: c.author.sessionId });
+    respond = () => 404;
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(calls.filter((x) => x.method === 'DELETE')).toHaveLength(2);
+    expect(outbox.isQueued(c.id)).toBe(false);
+    outbox.dispose();
+  });
+
+  it('drops queued sends for a deleted comment, and sends the delete on page exit', async () => {
+    vi.useFakeTimers();
+    const c = makeComment();
+    respond = () => 503;
+    const { outbox } = setup(c);
+    outbox.send(c.id);
+    await vi.advanceTimersByTimeAsync(100);
+    outbox.remove(c.id, c.author.sessionId, 8_000);
+    calls = [];
+    outbox.flushOnExit();
+    expect(calls.map((x) => x.method)).toEqual(['DELETE']);
+    // Too late to undo now: the server may already have it.
+    expect(outbox.cancelRemove(c.id)).toBe(false);
+    outbox.dispose();
+  });
+
   it('keeps retrying for two weeks, then gives up', async () => {
     const c = makeComment();
     respond = () => 503;
