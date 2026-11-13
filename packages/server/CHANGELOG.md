@@ -1,5 +1,12 @@
 # @githumbi/grabby-server
 
+## 0.3.0
+
+### Patch Changes
+
+- 65cb4e5: Security update: `@modelcontextprotocol/sdk` 1.32.2 and `zod` 4.6.7 (fixes the high-severity advisories `pnpm audit` reported, plus patched `body-parser`, `hono`, `qs` and `fast-uri` underneath). Comment validation moved to `zod/mini` with English messages only, so the Cloudflare Worker is smaller than before (26 KB gzip, was 31 KB); validation results and error messages are unchanged.
+- 45343a4: Deleting a comment that was already sent now deletes it on the feedback server too, so `pull`, the inbox and MCP no longer return it. The delete waits out the 8-second Undo window (Undo cancels it), is retried like any send, and goes out at once if the reviewer leaves the page. The collector accepts it only from the browser session that wrote the comment, with the project key and an allowed site, as for screenshots. Finish review's Done and `clearComments()` still only tidy the reviewer's browser.
+
 ## 0.2.0
 
 ### Minor Changes
