@@ -87,6 +87,10 @@ function matchesCombo(e: KeyboardEvent, parsed: ParsedKey): boolean {
 export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandler {
   let holdTimer: ReturnType<typeof setTimeout> | null = null;
   let holdActivated = false;
+  // Toggle mode fires on key-up, but only for a key-up whose key-down matched
+  // the full combo. Without this, releasing a plain "g" while typing a comment
+  // (Alt+G is the default) toggled selection mode and closed the comment box.
+  let togglePending = false;
   let listening = false;
 
   function handleKeyDown(e: KeyboardEvent): void {
@@ -116,6 +120,7 @@ export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandle
     } else {
       // toggle mode
       e.preventDefault();
+      togglePending = true;
     }
   }
 
@@ -138,6 +143,8 @@ export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandle
       }
     } else {
       // toggle mode: toggle on key-up so we don't double-fire
+      if (!togglePending) return;
+      togglePending = false;
       if (deps.isActive()) {
         deps.onDeactivate();
       } else {
@@ -163,6 +170,7 @@ export function createKeyboardHandler(deps: KeyboardHandlerDeps): KeyboardHandle
         holdTimer = null;
       }
       holdActivated = false;
+      togglePending = false;
 
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('keyup', handleKeyUp, true);

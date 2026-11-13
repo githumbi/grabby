@@ -369,12 +369,24 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   }
 
   // --- Removing comments, with Undo ---
-  function removeComments(ids: string[], message: string | null): void {
+  /**
+   * `withdraw`: the reviewer is discarding these, so take them back off the
+   * collector too (after the Undo window). Off for clears that only tidy this
+   * browser, like Finish review's Done, where the team should keep them.
+   */
+  function removeComments(ids: string[], message: string | null, withdraw = false): void {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
     const before = comments();
     const removed = before.filter((c) => idSet.has(c.id));
     setComments(before.filter((c) => !idSet.has(c.id)));
+
+    // Only comments from a live session (they carry a sync state) ever went
+    // to a collector.
+    const withdrawn = withdraw && outbox ? removed.filter((c) => c.sync !== undefined) : [];
+    // remove() drops queued sends (a screenshot, say); Undo must redo those.
+    const hadQueued = new Set(withdrawn.filter((c) => outbox!.isQueued(c.id)).map((c) => c.id));
+    for (const c of withdrawn) outbox!.remove(c.id, c.author.sessionId, message ? UNDO_MS + 500 : 0);
 
     const shotIds = removed.flatMap((c) => (c.screenshot?.localId ? [c.screenshot.localId] : []));
     const key = randomId();
@@ -392,9 +404,18 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
           clearTimeout(pendingShotDeletes.get(key));
           pendingShotDeletes.delete(key);
           const present = new Set(comments().map((c) => c.id));
-          const restored = [...removed.filter((c) => !present.has(c.id)), ...comments()]
+          // Cancel the server delete; if it already went (the page was left
+          // and came back), or the comment hadn't arrived yet, send it again.
+          const resend = new Set(withdrawn
+            .filter((c) => !present.has(c.id) && (!outbox!.cancelRemove(c.id) || c.sync !== 'sent' || hadQueued.has(c.id)))
+            .map((c) => c.id));
+          const back = removed
+            .filter((c) => !present.has(c.id))
+            .map((c) => (resend.has(c.id) ? { ...c, sync: 'pending' as const } : c));
+          const restored = [...back, ...comments()]
             .sort((a, b) => b.createdAt - a.createdAt);
           setComments(restored);
+          for (const id of resend) outbox?.send(id);
           showToast(`Restored ${removed.length} comment${removed.length === 1 ? '' : 's'}`);
         },
       }],
@@ -590,7 +611,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
     onDelete(comment) {
       overlay.hide();
-      removeComments([comment.id], 'Comment deleted');
+      removeComments([comment.id], 'Comment deleted', true);
     },
 
     onCopyAll() {
@@ -601,7 +622,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     onClearAll() {
       overlay.hide();
       const n = comments().length;
-      removeComments(comments().map((c) => c.id), `Cleared ${n} comment${n === 1 ? '' : 's'}`);
+      removeComments(comments().map((c) => c.id), `Cleared ${n} comment${n === 1 ? '' : 's'}`, true);
       commentsPanel.hide();
     },
 
@@ -844,7 +865,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
 
     deleteComment(id: string): void {
-      removeComments([id], null);
+      removeComments([id], null, true);
     },
 
     clearComments(): void {

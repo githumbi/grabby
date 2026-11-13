@@ -111,4 +111,4 @@ Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with t
    - Delete the merged `grabby-m1`…`grabby-m5`, `react-support` and old feature branches.
    - Rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`).
 
-Backlog: a reviewer deleting an already-sent comment doesn't delete it on the collector; Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.
+Backlog: Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.

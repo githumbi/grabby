@@ -61,6 +61,33 @@ describe('request handler', () => {
     expect(tooBig.status).toBe(413);
   });
 
+  it('lets a reviewer withdraw only their own comment, so pull no longer returns it', async () => {
+    const c = incoming();
+    await post({ comment: c });
+    const del = (headers: Record<string, string>) => handle(req('DELETE', `/v1/comments/${c.id}`, { headers }), REMOTE);
+    // Someone else's session, a wrong key, or a foreign site can't.
+    expect((await del({ origin: SITE, 'x-grabby-key': PK, 'x-grabby-session': 'someone-else-entirely' })).status).toBe(404);
+    expect((await del({ origin: SITE, 'x-grabby-key': 'pk_wrong', 'x-grabby-session': c.author.sessionId })).status).toBe(401);
+    expect((await del({ origin: 'https://evil.example', 'x-grabby-key': PK, 'x-grabby-session': c.author.sessionId })).status).toBe(403);
+    expect(await storage.get(c.id)).toBeDefined();
+    // Without a session it's the team's delete, which needs the token.
+    expect((await del({ origin: SITE, 'x-grabby-key': PK })).status).toBe(401);
+
+    const ok = await del({ origin: SITE, 'x-grabby-key': PK, 'x-grabby-session': c.author.sessionId });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('access-control-allow-origin')).toBe(SITE);
+    expect(await storage.list({ status: 'all' })).toHaveLength(0);
+    expect((await del({ origin: SITE, 'x-grabby-key': PK, 'x-grabby-session': c.author.sessionId })).status).toBe(404);
+  });
+
+  it('still lets the team delete with the admin token', async () => {
+    const c = incoming();
+    await post({ comment: c });
+    const res = await handle(req('DELETE', `/v1/comments/${c.id}`, { headers: { authorization: `Bearer ${SK}` } }), REMOTE);
+    expect(res.status).toBe(200);
+    expect(await storage.get(c.id)).toBeUndefined();
+  });
+
   it('never trusts a local peer on a public collector', async () => {
     await post({ comment: incoming() });
     expect((await handle(req('GET', '/v1/comments'), LOCAL)).status).toBe(401);

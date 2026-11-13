@@ -217,6 +217,25 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
     return json(200, { ok: true });
   }
 
+  /**
+   * A reviewer deleting a comment they already sent. Same rules as attaching
+   * a screenshot: the project key, an allowed origin, and the browser session
+   * that wrote the comment. Anyone else gets the same 404 as a missing id.
+   */
+  async function deleteOwnComment(ctx: RouteContext): Promise<Response> {
+    if (!writeLimit.allow(ctx.peer.ip)) return json(429, { error: 'Too many requests' });
+    const auth = authorizeWrite(ctx);
+    if ('error' in auth) return json(auth.status, { error: auth.error });
+    const comment = await storage.get(ctx.params.id);
+    const session = ctx.req.headers.get('x-grabby-session');
+    if (!comment || comment.projectId !== auth.project || !session || !safeEqual(session, comment.author.sessionId)) {
+      return json(404, { error: 'No such comment' });
+    }
+    await storage.remove([comment.id]);
+    log(`[grabby] comment withdrawn on ${forLog(comment.page.route)}`);
+    return json(200, { ok: true });
+  }
+
   function listFilter(url: URL): ListFilter {
     const raw = url.searchParams.get('status');
     const status: ListFilter['status'] = raw === 'resolved' || raw === 'all' ? raw : 'open';
@@ -268,10 +287,15 @@ export function createHandler(config: CollectorConfig, deps: HandlerDeps): Reque
     const n = await storage.setStatus([ctx.params.id], status);
     return n ? json(200, { ok: true }) : json(404, { error: 'No such comment' });
   }));
-  route('DELETE', '/v1/comments/:id', readRoute(async (ctx) => {
-    const n = await storage.remove([ctx.params.id]);
-    return n ? json(200, { ok: true }) : json(404, { error: 'No such comment' });
-  }));
+  route('DELETE', '/v1/comments/:id', async (ctx) => {
+    // A reviewer deleting their own comment sends the project key and their
+    // session; anything else is the team (admin/inbox token, or local).
+    if (ctx.req.headers.get('x-grabby-session') !== null) return deleteOwnComment(ctx);
+    return readRoute(async () => {
+      const n = await storage.remove([ctx.params.id]);
+      return n ? json(200, { ok: true }) : json(404, { error: 'No such comment' });
+    })(ctx);
+  });
   route('POST', '/v1/comments/bulk', readRoute(async (ctx) => {
     const read = await readJson(ctx.req, MAX_JSON_BYTES);
     if (!read.ok) return json(read.status, { error: read.error });

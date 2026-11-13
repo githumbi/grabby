@@ -244,7 +244,9 @@ export interface GrabbyAPI {
   getComments(): GrabbyComment[];
   /** Export text for the given (default: all) comments at a detail level. */
   exportComments(options?: { level?: DetailLevel; ids?: string[] }): string;
+  /** Deletes a comment here and, in live mode, on the feedback server too. */
   deleteComment(id: string): void;
+  /** Clears this browser's list only; comments already sent stay with the team. */
   clearComments(): void;
   /**
    * Tell Grabby who is signed in, so commenters aren't asked for a name.
