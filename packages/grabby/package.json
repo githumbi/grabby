@@ -143,7 +143,7 @@
     "clean": "node -e \"const fs=require('fs');['dist','README.md'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch{}})\""
   },
   "dependencies": {
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.1",
     "modern-screenshot": "^4.7.0",
     "unplugin": "^2.3.11"
   },
