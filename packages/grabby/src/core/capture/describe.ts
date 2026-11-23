@@ -1,4 +1,4 @@
-import type { GrabbyTarget, TargetKind } from '../types';
+import type { GrabbyComment, GrabbyTarget, TargetKind } from '../types';
 import { detectKind } from './kind';
 import { isMasked, textOf, truncate } from './preview';
 import { redact } from './redact';
@@ -139,4 +139,26 @@ export function describeTarget(target: GrabbyTarget): string {
   const noun = nounFor(target.tag, target.kind, '', (facts.type ?? '').toLowerCase(), false, !!facts.heading);
   const name = facts.label || facts.heading || facts.text || facts.alt || '';
   return quoted(noun, name);
+}
+
+/** How many members a group description names before "and N more". */
+const GROUP_NAMED = 3;
+
+/** `3 elements: Button "Approve", Button "Reject", Text "Total"` from their labels. */
+export function describeGroup(labels: string[]): string {
+  const named = labels.slice(0, GROUP_NAMED).join(', ');
+  const more = labels.length > GROUP_NAMED ? ` and ${labels.length - GROUP_NAMED} more` : '';
+  return `${labels.length} elements: ${named}${more}`;
+}
+
+/** `Area in Card "Your plan"`, for a comment on a region. */
+export function describeArea(around: string): string {
+  return `Area in ${around}`;
+}
+
+/** What a saved comment is about, in plain words: one element, several, or an area. */
+export function describeComment(c: Pick<GrabbyComment, 'target' | 'members' | 'area'>): string {
+  if (c.members?.length) return describeGroup(c.members.map((m) => m.label));
+  if (c.area) return describeArea(describeTarget(c.target));
+  return describeTarget(c.target);
 }

@@ -5,7 +5,7 @@ import { safeQuery } from '../utils';
 import { authorLabel } from '../capture/export';
 import { getScreenshot } from '../storage/screenshot-store';
 import { ICON_DISMISS } from './toolbar-icons';
-import { describeTarget } from '../capture/describe';
+import { describeComment } from '../capture/describe';
 import { Z_INDEX_POPOVER, TOOLBAR_POPOVER_OFFSET } from '../constants';
 
 const PANEL_ID = '__grabby-comments__';
@@ -192,7 +192,10 @@ export function createCommentsPanel(callbacks: CommentsPanelCallbacks, options: 
   function row(comment: GrabbyComment, showAuthors: boolean): HTMLElement {
     const t = comment.target;
     // Reviewers see what they commented on in plain words; developers see kind, component and file.
-    const meta: Node[] = live ? [document.createTextNode(`${describeTarget(t)} `)] : [h('span', { class: 'grabby-kind' }, t.kind)];
+    const group = comment.members?.length ? `${comment.members.length} elements` : comment.area ? 'area' : null;
+    const meta: Node[] = live
+      ? [document.createTextNode(`${describeComment(comment)} `)]
+      : [h('span', { class: 'grabby-kind' }, group ?? t.kind)];
     if (!live) {
       if (t.component) meta.push(document.createTextNode(`${t.component} `));
       if (t.source) {

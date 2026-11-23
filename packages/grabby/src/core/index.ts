@@ -19,6 +19,8 @@ export type {
   GrabbyAPI,
   GrabbyComment,
   GrabbyTarget,
+  GrabbyMember,
+  AreaBox,
   TargetKind,
   DetailLevel,
   CommentAuthor,

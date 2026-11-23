@@ -1,8 +1,9 @@
-import type { ComponentResolver, SourceResolver, GrabbyTarget, SourceLocation, StackFrame } from '../types';
+import type { ComponentResolver, SourceResolver, GrabbyTarget, GrabbyMember, SourceLocation, StackFrame } from '../types';
 import { buildUniqueSelector } from '../utils';
 import { detectKind } from './kind';
 import { collectFacts } from './facts';
-import { buildPreview, isNoiseClass } from './preview';
+import { buildPreview, isNoiseClass, truncate } from './preview';
+import { describeElement } from './describe';
 
 export interface CaptureDeps {
   componentResolver: ComponentResolver | null;
@@ -62,5 +63,24 @@ export function captureTarget(el: Element, deps: CaptureDeps): GrabbyTarget {
     preview: kind === 'section' ? `<${el.tagName.toLowerCase()}>` : buildPreview(el, cleanClasses),
     facts,
     extra,
+  };
+}
+
+/** Members of a multi-element comment carry a shorter preview: there can be many. */
+const MEMBER_PREVIEW = 120;
+
+/** One element of a multi-element comment: where it is and what it is, without the facts. */
+export function captureMember(el: Element, deps: CaptureDeps): GrabbyMember {
+  const cleanClasses = deps.cleanClasses ?? ((list: string[]) => list.filter((c) => !isNoiseClass(c)));
+  const kind = detectKind(el);
+  const { component, frames } = resolveStack(el, deps);
+  return {
+    kind,
+    tag: el.tagName.toLowerCase(),
+    component,
+    source: resolveSource(el, deps, frames),
+    selector: buildUniqueSelector(el),
+    preview: kind === 'section' ? `<${el.tagName.toLowerCase()}>` : truncate(buildPreview(el, cleanClasses), MEMBER_PREVIEW),
+    label: describeElement(el),
   };
 }

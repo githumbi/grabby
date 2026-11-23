@@ -48,6 +48,26 @@ const factsSchema = z.pipe(
 
 const stackEntry = z.object({ name: str(120), file: nullableStr(MAX_TEXT), line: int });
 
+const MAX_MEMBERS = 20;
+const kindSchema = z.enum(['action', 'field', 'text', 'media', 'container', 'section']);
+const tagSchema = z.string().check(z.regex(/^[a-z][a-z0-9-]{0,40}$/i));
+const sourceSchema = z.pipe(
+  z.optional(z.nullable(z.object({ file: str(MAX_TEXT), line: int, column: int }))),
+  z.transform((s: { file: string; line: number | null; column: number | null } | null | undefined) => s ?? null),
+);
+const fraction = z.number().check(z.minimum(0), z.maximum(1));
+
+/** One element of a multi-element comment. */
+const memberSchema = z.object({
+  kind: kindSchema,
+  tag: tagSchema,
+  component: nullableStr(120),
+  source: sourceSchema,
+  selector: str(MAX_SELECTOR),
+  preview: str(MAX_PREVIEW),
+  label: z._default(z.optional(str(MAX_TEXT)), ''),
+});
+
 const commentSchema = z.object({
   id: z.string().check(z.regex(ID)),
   createdAt: z.int().check(z.positive()),
@@ -65,13 +85,10 @@ const commentSchema = z.object({
     viewport: z.tuple([coord, coord]),
   }),
   target: z.object({
-    kind: z.enum(['action', 'field', 'text', 'media', 'container', 'section']),
-    tag: z.string().check(z.regex(/^[a-z][a-z0-9-]{0,40}$/i)),
+    kind: kindSchema,
+    tag: tagSchema,
     component: nullableStr(120),
-    source: z.pipe(
-      z.optional(z.nullable(z.object({ file: str(MAX_TEXT), line: int, column: int }))),
-      z.transform((s: { file: string; line: number | null; column: number | null } | null | undefined) => s ?? null),
-    ),
+    source: sourceSchema,
     stack: z.pipe(
       z._default(z.optional(z.array(stackEntry)), []),
       z.transform((s: Array<z.output<typeof stackEntry>>) => s.slice(0, MAX_STACK)),
@@ -82,6 +99,8 @@ const commentSchema = z.object({
     extra: factsSchema,
   }),
   framework: z._default(z.optional(str(40)), 'HTML'),
+  members: z.optional(z.array(memberSchema).check(z.maxLength(MAX_MEMBERS))),
+  area: z.optional(z.object({ x: fraction, y: fraction, w: fraction, h: fraction })),
 });
 
 export const payloadSchema = z.object({ comment: commentSchema });
@@ -125,6 +144,10 @@ export function toStoredShape(c: IncomingComment): Omit<GrabbyComment, 'status' 
       extra: c.target.extra,
     },
     framework: c.framework,
+    ...(c.members?.length
+      ? { members: c.members.map((m) => ({ kind: m.kind, tag: m.tag.toLowerCase(), component: m.component, source: m.source, selector: m.selector, preview: m.preview, label: m.label })) }
+      : {}),
+    ...(c.area ? { area: { x: c.area.x, y: c.area.y, w: c.area.w, h: c.area.h } } : {}),
   };
 }
 

@@ -6,6 +6,8 @@ export { formatExport, estimateTokens, authorLabel, type ExportEnv } from './cor
 export type {
   GrabbyComment,
   GrabbyTarget,
+  GrabbyMember,
+  AreaBox,
   TargetKind,
   DetailLevel,
   CommentAuthor,

@@ -80,7 +80,30 @@ export interface GrabbyComment {
    * Where on the element the reviewer clicked, as fractions of its width and
    * height; the numbered marker sits there. Browser-only, never exported.
    */
-  pin?: { x: number; y: number };
+  pin?: { x: number; y: number };  /**
+   * A comment on several elements at once (drag across them, or ⌘/Ctrl-click
+   * each). `target` is then the smallest element containing them all.
+   */
+  members?: GrabbyMember[];
+  /**
+   * A comment on a region rather than an element (drag over empty space), as
+   * fractions of `target`'s box. `target` is the element around the region.
+   */
+  area?: AreaBox;
+}
+
+/** One element of a multi-element comment: enough to find it, without the per-element facts. */
+export type GrabbyMember = Pick<GrabbyTarget, 'kind' | 'tag' | 'component' | 'source' | 'selector' | 'preview'> & {
+  /** Plain name for reviewers, e.g. `Button "Approve"`. */
+  label: string;
+};
+
+/** A rectangle as fractions (0–1) of an element's width and height. */
+export interface AreaBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface ToolbarState {

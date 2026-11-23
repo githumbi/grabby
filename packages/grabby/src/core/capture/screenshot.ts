@@ -97,18 +97,43 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  * costs nothing until someone actually comments. Resolves to null instead of
  * throwing: a missing screenshot must never cost the user their comment.
  */
-export async function captureScreenshot(el: Element): Promise<Screenshot | null> {
+/** A region to keep, in viewport coordinates (a multi-element or area comment). */
+export interface ClipBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** A clipped region further down than this inside its element isn't rendered (too costly). */
+const MAX_CLIP_DEPTH = 4000;
+
+const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max);
+
+export async function captureScreenshot(el: Element, clip?: ClipBox): Promise<Screenshot | null> {
   if (typeof window === 'undefined' || !el.isConnected) return null;
   const rect = el.getBoundingClientRect();
   if (rect.width < 1 || rect.height < 1) return null;
 
-  const cssWidth = Math.min(rect.width, document.documentElement.scrollWidth || rect.width);
-  const cssHeight = Math.min(rect.height, MAX_CSS_HEIGHT);
+  const fullWidth = Math.min(rect.width, document.documentElement.scrollWidth || rect.width);
+  // With a clip, render the element down to the clip's bottom, then crop.
+  const region = clip ? {
+    x: clamp(clip.left - rect.left, fullWidth),
+    y: clamp(clip.top - rect.top, rect.height),
+    right: clamp(clip.right - rect.left, fullWidth),
+    bottom: clamp(clip.bottom - rect.top, rect.height),
+  } : null;
+  if (region && (region.right - region.x < 1 || region.bottom - region.y < 1 || region.bottom > MAX_CLIP_DEPTH)) return null;
+
+  const cssWidth = fullWidth;
+  const cssHeight = region ? region.bottom : Math.min(rect.height, MAX_CSS_HEIGHT);
+  const outWidth = region ? region.right - region.x : cssWidth;
+  const outHeight = region ? Math.min(region.bottom - region.y, MAX_CSS_HEIGHT) : cssHeight;
   const dpr = window.devicePixelRatio || 1;
-  const scale = Math.min(dpr, MAX_SIDE / Math.max(cssWidth, cssHeight));
+  const scale = Math.min(dpr, MAX_SIDE / Math.max(outWidth, outHeight));
 
   const render = async (): Promise<Screenshot | null> => {
-    const { createContext, destroyContext, domToBlob } = await import('modern-screenshot');
+    const { createContext, destroyContext, domToBlob, domToCanvas } = await import('modern-screenshot');
     const context = await createContext(el, {
       width: cssWidth,
       height: cssHeight,
@@ -125,14 +150,23 @@ export async function captureScreenshot(el: Element): Promise<Screenshot | null>
     context.sandbox = await getSandbox();
     let blob: Blob | null;
     try {
-      blob = await domToBlob(context);
+      if (region) {
+        const full = await domToCanvas(context);
+        const crop = document.createElement('canvas');
+        crop.width = Math.max(1, Math.round(outWidth * scale));
+        crop.height = Math.max(1, Math.round(outHeight * scale));
+        crop.getContext('2d')?.drawImage(full, region.x * scale, region.y * scale, outWidth * scale, outHeight * scale, 0, 0, crop.width, crop.height);
+        blob = await new Promise<Blob | null>((resolve) => crop.toBlob(resolve, 'image/webp', 0.8));
+      } else {
+        blob = await domToBlob(context);
+      }
     } finally {
       // Keep our sandbox for next time; free everything else.
       context.sandbox = undefined;
       destroyContext(context);
     }
     if (!blob) return null;
-    return { blob, width: Math.round(cssWidth * scale), height: Math.round(cssHeight * scale) };
+    return { blob, width: Math.round(outWidth * scale), height: Math.round(outHeight * scale) };
   };
 
   return withTimeout(render(), TIMEOUT_MS + 1000);
