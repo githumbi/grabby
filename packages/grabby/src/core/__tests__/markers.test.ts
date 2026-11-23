@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { queryUi, disposeUiRoot } from '../ui/root';
+import { queryUi, disposeUiRoot, getUiRoot } from '../ui/root';
 import { init, createGrabInstance } from '../grab';
 import type { GrabbyAPI } from '../types';
 
@@ -12,7 +12,7 @@ function giveBox(el: Element, left: number, top: number, width = 100, height = 4
 }
 
 function markers(): HTMLButtonElement[] {
-  return [...(queryUi('#__grabby-markers__')?.querySelectorAll<HTMLButtonElement>('.grabby-marker') ?? [])]
+  return [...(getUiRoot().querySelectorAll<HTMLButtonElement>('.grabby-markers-layer .grabby-marker'))]
     .filter((m) => !m.classList.contains('grabby-marker-out'));
 }
 
@@ -113,6 +113,39 @@ describe('numbered markers', () => {
     expect(markers()).toHaveLength(0);
     queryUi<HTMLButtonElement>('[data-grabby-btn="expand"]')!.click();
     expect(markers()).toHaveLength(1);
+  });
+
+  it('puts markers for page content in page coordinates, so they scroll with it', async () => {
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 500 });
+    try {
+      await comment(document.getElementById('buy')!, 'Make it green', { x: 50, y: 115 });
+      await wait(20);
+      const [m] = markers();
+      expect(m.parentElement!.id).toBe('__grabby-markers-doc__');
+      // 15px into the 30px-tall button at top 100, scrolled down 500: 500 + 115 - 11.
+      expect(m.style.transform).toBe('translate(39px, 604px)');
+    } finally {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    }
+  });
+
+  it('keeps markers in fixed panels and scrolling boxes on screen coordinates, updated on scroll', async () => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="panel" style="position: fixed"><button id="inpanel">Save</button></div><div id="box" style="overflow-y: auto"><p id="inbox">Row</p></div>');
+    const inPanel = document.getElementById('inpanel')!;
+    const inBox = document.getElementById('inbox')!;
+    giveBox(inPanel, 300, 300, 80, 30);
+    giveBox(inBox, 300, 400, 200, 20);
+    await comment(inPanel, 'Panel button');
+    await comment(inBox, 'Row in a box');
+    await wait(20);
+    const layerOf = (text: string) => markers().find((m) => m.getAttribute('aria-label')!.includes(text))!.parentElement!.id;
+    expect(layerOf('Panel button')).toBe('__grabby-markers__');
+    expect(layerOf('Row in a box')).toBe('__grabby-markers__');
+
+    giveBox(inBox, 300, 350, 200, 20); // the box scrolled by 50px
+    document.getElementById('box')!.dispatchEvent(new Event('scroll'));
+    const row = markers().find((m) => m.getAttribute('aria-label')!.includes('Row in a box'))!;
+    expect(row.style.transform).toMatch(/, 339px\)$/);
   });
 
   it('hides the marker of an element that is no longer rendered', async () => {
