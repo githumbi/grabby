@@ -149,6 +149,31 @@ describe('commenting on several elements or an area', () => {
     expect(api.getComments()[0].members?.map((m) => m.selector)).toEqual(['#actions', '#note']);
   });
 
+  it('drags still work on a page that cancels pointerdown (no mousemove arrives)', async () => {
+    // Like the cash repatriation prototype: keeps its menus shut while Grabby picks.
+    const guard = (e: Event) => {
+      if (document.body.classList.contains('grabby-crosshair-active')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) window.addEventListener(t, guard, true);
+    try {
+      document.elementFromPoint = () => byId('main');
+      api.activate();
+      // The browser sends only pointer events during the drag, then the click.
+      mouse('pointerdown', 105, 105);
+      mouse('pointermove', 200, 130);
+      mouse('pointermove', 380, 155);
+      await wait(30);
+      mouse('pointerup', 380, 155);
+      mouse('click', 380, 155);
+      expect(queryUi('.grabby-cp-heading')?.textContent).toBe('2 elements: Button “Approve”, Button “Reject”');
+    } finally {
+      for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) window.removeEventListener(t, guard, true);
+    }
+  });
+
   it('a plain click still comments on one element', async () => {
     document.elementFromPoint = () => byId('approve');
     api.activate();
