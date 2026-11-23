@@ -281,6 +281,10 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
       listening = true;
       deps.crosshair.activate();
       for (const type of PRESS_EVENTS) window.addEventListener(type, handlePress, { capture: true, passive: false });
+      // pointermove too: a page that cancels pointerdown (to keep its menus
+      // shut while Grabby picks) stops the browser sending mousemove until
+      // the button comes up, which would hide every drag from us.
+      document.addEventListener('pointermove', handleMouseMove, true);
       document.addEventListener('mousemove', handleMouseMove, true);
       document.addEventListener('click', handleClick, true);
       window.addEventListener('keyup', handleKeyUp, true);
@@ -298,6 +302,7 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
       deps.crosshair.hold(false);
       deps.crosshair.deactivate();
       for (const type of PRESS_EVENTS) window.removeEventListener(type, handlePress, true);
+      document.removeEventListener('pointermove', handleMouseMove, true);
       document.removeEventListener('mousemove', handleMouseMove, true);
       document.removeEventListener('click', handleClick, true);
       window.removeEventListener('keyup', handleKeyUp, true);
