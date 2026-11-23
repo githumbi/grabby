@@ -4,6 +4,10 @@ import { svgIcon, paths, type IconSpec } from '../ui/dom';
 import type { GrabbyComment } from '../types';
 
 const LAYER_ID = '__grabby-markers__';
+/** Markers for elements that scroll with the page live here, in page coordinates. */
+const DOC_LAYER_ID = '__grabby-markers-doc__';
+/** How often a marker's scroll context (page, fixed panel, scrolling box) is re-checked. */
+const CONTEXT_CHECK_MS = 1000;
 const TIP_ID = '__grabby-marker-tip__';
 const STYLE_ID = '__grabby-marker-styles__';
 const SIZE = 22;
@@ -40,12 +44,32 @@ export interface Markers {
   dispose(): void;
 }
 
+/** How a marker follows its element: with the page, or by being repositioned on screen. */
+type ScrollContext = 'page' | 'screen';
+
 interface Entry {
   comment: GrabbyComment;
   button: HTMLButtonElement;
   number: HTMLSpanElement;
   element: Element | null;
   lastLookup: number;
+  context: ScrollContext;
+  contextCheckedAt: number;
+}
+
+/**
+ * 'page' when the element scrolls with the page itself; 'screen' when it sits
+ * in a fixed or sticky panel (it doesn't move with the page) or in its own
+ * scrolling box (only script can follow that).
+ */
+function scrollContextOf(el: Element): ScrollContext {
+  for (let cur = el.parentElement; cur && cur !== document.body && cur !== document.documentElement; cur = cur.parentElement) {
+    const style = getComputedStyle(cur);
+    if (style.position === 'fixed' || style.position === 'sticky') return 'screen';
+    if (/(auto|scroll|overlay)/.test(style.overflowY + style.overflowX)) return 'screen';
+  }
+  const own = getComputedStyle(el).position;
+  return own === 'fixed' || own === 'sticky' ? 'screen' : 'page';
 }
 
 /**
@@ -58,6 +82,7 @@ interface Entry {
  */
 export function createMarkers(deps: MarkersDeps): Markers {
   let layer: HTMLDivElement | null = null;
+  let docLayer: HTMLDivElement | null = null;
   let tip: HTMLDivElement | null = null;
   let visible = false;
   let route = '';
@@ -69,13 +94,27 @@ export function createMarkers(deps: MarkersDeps): Markers {
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
     addStyles(STYLE_ID, `
+      /*
+       * Page coordinates: the browser moves these with the page as it
+       * scrolls, so they never trail behind their element. (A fixed layer
+       * repositioned from script lags a frame behind fast scrolling.)
+       */
+      #${DOC_LAYER_ID} {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+        z-index: ${Z_INDEX_CROSSHAIR};
+      }
       #${LAYER_ID} {
         position: fixed;
         inset: 0;
         pointer-events: none;
         z-index: ${Z_INDEX_CROSSHAIR};
       }
-      #${LAYER_ID} .grabby-marker {
+      .grabby-markers-layer .grabby-marker {
         position: absolute;
         left: 0;
         top: 0;
@@ -96,22 +135,22 @@ export function createMarkers(deps: MarkersDeps): Markers {
         pointer-events: auto;
         transition: transform 0.12s ease, box-shadow 0.15s ease;
       }
-      #${LAYER_ID} .grabby-marker[hidden] { display: none; }
-      #${LAYER_ID} .grabby-marker:hover,
-      #${LAYER_ID} .grabby-marker:focus-visible {
+      .grabby-markers-layer .grabby-marker[hidden] { display: none; }
+      .grabby-markers-layer .grabby-marker:hover,
+      .grabby-markers-layer .grabby-marker:focus-visible {
         z-index: 1;
         outline: none;
         box-shadow: 0 0 0 2px #fff, 0 0 0 5px color-mix(in srgb, var(--grabby-accent, #2563eb) 35%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
       }
-      #${LAYER_ID} .grabby-marker-edit { display: none; }
-      #${LAYER_ID} .grabby-marker:hover .grabby-marker-num,
-      #${LAYER_ID} .grabby-marker:focus-visible .grabby-marker-num { display: none; }
-      #${LAYER_ID} .grabby-marker:hover .grabby-marker-edit,
-      #${LAYER_ID} .grabby-marker:focus-visible .grabby-marker-edit { display: block; }
-      #${LAYER_ID} .grabby-marker-in {
+      .grabby-markers-layer .grabby-marker-edit { display: none; }
+      .grabby-markers-layer .grabby-marker:hover .grabby-marker-num,
+      .grabby-markers-layer .grabby-marker:focus-visible .grabby-marker-num { display: none; }
+      .grabby-markers-layer .grabby-marker:hover .grabby-marker-edit,
+      .grabby-markers-layer .grabby-marker:focus-visible .grabby-marker-edit { display: block; }
+      .grabby-markers-layer .grabby-marker-in {
         animation: grabby-marker-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
-      #${LAYER_ID} .grabby-marker-out {
+      .grabby-markers-layer .grabby-marker-out {
         animation: grabby-marker-out 0.2s ease-out both;
         pointer-events: none;
       }
@@ -145,7 +184,7 @@ export function createMarkers(deps: MarkersDeps): Markers {
         to { opacity: 1; transform: none; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #${LAYER_ID} .grabby-marker-in, #${LAYER_ID} .grabby-marker-out, #${TIP_ID} { animation: none; }
+        .grabby-markers-layer .grabby-marker-in, .grabby-markers-layer .grabby-marker-out, #${TIP_ID} { animation: none; }
       }
     `);
   }
@@ -155,11 +194,15 @@ export function createMarkers(deps: MarkersDeps): Markers {
     injectStyles();
     layer = document.createElement('div');
     layer.id = LAYER_ID;
+    layer.className = 'grabby-markers-layer';
+    docLayer = document.createElement('div');
+    docLayer.id = DOC_LAYER_ID;
+    docLayer.className = 'grabby-markers-layer';
     tip = document.createElement('div');
     tip.id = TIP_ID;
     tip.hidden = true;
     tip.setAttribute('role', 'tooltip');
-    getUiRoot().append(layer, tip);
+    getUiRoot().append(docLayer, layer, tip);
     return layer;
   }
 
@@ -181,7 +224,7 @@ export function createMarkers(deps: MarkersDeps): Markers {
     button.className = 'grabby-marker';
     button.dataset.grabbyMarker = comment.id;
     button.append(number, svgIcon(ICON_EDIT, 'grabby-marker-edit'));
-    const entry: Entry = { comment, button, number, element: null, lastLookup: 0 };
+    const entry: Entry = { comment, button, number, element: null, lastLookup: 0, context: 'page', contextCheckedAt: -Infinity };
     button.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -297,9 +340,21 @@ export function createMarkers(deps: MarkersDeps): Markers {
         entry.button.hidden = true;
         continue;
       }
+      if (now - entry.contextCheckedAt >= CONTEXT_CHECK_MS) {
+        entry.contextCheckedAt = now;
+        entry.context = scrollContextOf(entry.element!);
+        const home = entry.context === 'page' ? docLayer : layer;
+        if (home && entry.button.parentElement !== home) home.appendChild(entry.button);
+      }
       const pin = entry.comment.pin ?? { x: 1, y: 0 };
-      const x = rect.left + pin.x * rect.width - SIZE / 2;
-      const y = rect.top + pin.y * rect.height - SIZE / 2;
+      // Kept inside the window's width, so a pin at the right edge can't add a horizontal scrollbar.
+      const maxX = (document.documentElement.clientWidth || window.innerWidth) - SIZE;
+      let x = Math.max(0, Math.min(rect.left + pin.x * rect.width - SIZE / 2, maxX));
+      let y = rect.top + pin.y * rect.height - SIZE / 2;
+      if (entry.context === 'page') {
+        x += window.scrollX;
+        y = Math.max(0, y + window.scrollY);
+      }
       entry.button.hidden = false;
       entry.button.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     }
@@ -339,6 +394,14 @@ export function createMarkers(deps: MarkersDeps): Markers {
     rafId = null;
   }
 
+  /**
+   * Markers on screen coordinates (elements in their own scrolling box) are
+   * moved as each scroll event arrives, not only on the next frame.
+   */
+  function handleScroll(): void {
+    if (visible && entries.size) position(performance.now());
+  }
+
   return {
     setVisible(next: boolean): void {
       if (next === visible) return;
@@ -346,8 +409,10 @@ export function createMarkers(deps: MarkersDeps): Markers {
       if (next) {
         route = deps.currentRoute();
         lastRouteCheck = performance.now();
+        document.addEventListener('scroll', handleScroll, { capture: true, passive: true });
         sync(true);
       } else {
+        document.removeEventListener('scroll', handleScroll, true);
         stop();
         hideTip();
         if (hovered) endHover(hovered);
@@ -360,13 +425,16 @@ export function createMarkers(deps: MarkersDeps): Markers {
     },
 
     isMarkerElement(el: Element): boolean {
-      return !!layer && (layer === el || layer.contains(el));
+      return [layer, docLayer].some((l) => !!l && (l === el || l.contains(el)));
     },
 
     dispose(): void {
       stop();
+      document.removeEventListener('scroll', handleScroll, true);
       entries.clear();
       layer?.remove();
+      docLayer?.remove();
+      docLayer = null;
       tip?.remove();
       layer = null;
       tip = null;
