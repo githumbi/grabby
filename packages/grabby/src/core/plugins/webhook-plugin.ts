@@ -33,7 +33,8 @@ export function createWebhookPlugin(url: string): Plugin {
             type: 'grabby.comment',
             version: 1,
             origin: typeof location !== 'undefined' ? location.origin : null,
-            comment,
+            // The marker position is browser-only.
+            comment: { ...comment, pin: undefined },
           }),
         }).catch(() => {});
       },

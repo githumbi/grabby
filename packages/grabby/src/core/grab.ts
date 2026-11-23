@@ -27,6 +27,7 @@ import { createOutbox, type Outbox, type SyncState } from './sync/outbox';
 import { consumeFeedbackLink, startFeedbackSession, endFeedbackSession } from './live/activation';
 import { getScreenshot } from './storage/screenshot-store';
 import { createFreezeOverlay } from './overlay/freeze-overlay';
+import { createMarkers } from './overlay/markers';
 import { showSelectFeedback, disposeFeedbackStyles } from './overlay/select-feedback';
 import { TOOLBAR_TOAST_OFFSET } from './constants';
 import { safeQuery } from './utils';
@@ -241,7 +242,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // The element being commented on and its screenshot, captured the moment
   // it was clicked, before anything on the page can change.
   let selectedElement: Element | null = null;
+  let selectedPin: { x: number; y: number } | undefined;
   let pendingShot: Promise<Screenshot | null> | null = null;
+  // Elements commented on in this page view, so markers survive selectors
+  // that change between renders (generated ids, say).
+  const commentedElements = new Map<string, Element>();
+  /** A comment opened from its marker (not the list) is being edited. */
+  let editingFromMarker = false;
   let level = loadLevel(merged.detailLevel);
   // Close shrinks the toolbar to a corner button; remembered for the tab.
   let collapsed = loadCollapsed();
@@ -319,7 +326,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   }
 
   // --- Saving a new comment ---
-  function saveComment(element: Element, text: string, shot: Promise<Screenshot | null> | null): GrabbyComment {
+  function saveComment(element: Element, text: string, shot: Promise<Screenshot | null> | null, pin?: { x: number; y: number }): GrabbyComment {
     const now = Date.now();
     const comment: GrabbyComment = {
       id: randomId(),
@@ -337,7 +344,9 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       screenshot: null,
       framework: adapters.frameworkFor(element),
       ...(outbox ? { sync: 'pending' as const } : {}),
+      ...(pin ? { pin } : {}),
     };
+    commentedElements.set(comment.id, element);
 
     setComments([comment, ...comments()].slice(0, MAX_COMMENTS));
     pluginRegistry.callHook('onComment', comment, element);
@@ -394,6 +403,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     const idSet = new Set(ids);
     const before = comments();
     const removed = before.filter((c) => idSet.has(c.id));
+    for (const id of ids) commentedElements.delete(id);
     setComments(before.filter((c) => !idSet.has(c.id)));
 
     // Only comments from a live session (they carry a sync state) ever went
@@ -473,11 +483,19 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
    */
   function hideCommentPopover(): void {
     commentPopover.hide();
+    endMarkerEdit();
     if (picker.isHolding()) {
       selectedElement = null;
+      selectedPin = undefined;
       pendingShot = null;
       picker.release();
     }
+  }
+
+  function endMarkerEdit(): void {
+    if (!editingFromMarker) return;
+    editingFromMarker = false;
+    overlay.hide();
   }
 
   function closeAllPopovers(): void {
@@ -521,8 +539,14 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         pluginRegistry.callHook('onElementHover', element);
       }
     },
-    onSelect(element) {
+    onSelect(element, point) {
       selectedElement = element;
+      const rect = element.getBoundingClientRect();
+      const frac = (v: number, start: number, size: number) => (size > 0 ? Math.min(1, Math.max(0, (v - start) / size)) : 0.5);
+      selectedPin = {
+        x: Math.round(frac(point.x, rect.left, rect.width) * 1000) / 1000,
+        y: Math.round(frac(point.y, rect.top, rect.height) * 1000) / 1000,
+      };
       pendingShot = store.state.options.screenshots ? captureScreenshot(element) : null;
       pluginRegistry.callHook('onElementSelect', element);
       coachMark.dismiss();
@@ -532,6 +556,42 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       commentPopover.show({ anchor: element, mode: 'new', askIdentity: shouldAskIdentity() });
     },
   });
+
+  // --- Numbered markers on commented elements (current page only) ---
+  const markers = createMarkers({
+    getComments: comments,
+    currentRoute: () => sanitizeRoute(location, store.state.options.captureQueryParams),
+    findElement(comment) {
+      const known = commentedElements.get(comment.id);
+      if (known?.isConnected) return known;
+      return safeQuery(comment.target.selector);
+    },
+    onHover(comment, element) {
+      // Never disturb the highlight of a comment being written or edited.
+      if (picker.isHolding() || editingFromMarker || commentPopover.isVisible()) return;
+      if (comment && element) overlay.show(element, comment.target.component, null, []);
+      else overlay.hide();
+    },
+    onOpen(comment, element, marker) {
+      // Mid-way through a new comment: finish that one first.
+      if (picker.isHolding()) return;
+      closeAllPopovers();
+      doDeactivate(true);
+      editingFromMarker = true;
+      if (element) overlay.show(element, comment.target.component, null, []);
+      commentPopover.show({
+        anchor: element ?? marker,
+        initialValue: comment.comment,
+        mode: 'edit',
+        entryId: comment.id,
+      });
+    },
+  });
+
+  /** Markers show while the toolbar is open; collapsing or hiding it hides them. */
+  function updateMarkers(): void {
+    markers.setVisible(store.state.toolbar.visible && !collapsed && store.state.options.enabled);
+  }
 
   function doActivate(): void {
     if (!store.state.options.enabled) return;
@@ -624,6 +684,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     toolbar.collapse();
     saveCollapsed(true);
     updateToastOffset();
+    updateMarkers();
   }
 
   function expandToolbar(): void {
@@ -631,6 +692,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     toolbar.expand();
     saveCollapsed(false);
     updateToastOffset();
+    updateMarkers();
   }
 
   // --- Comments panel ---
@@ -735,9 +797,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       if (ctx.mode === 'new') {
         const element = selectedElement;
         const shot = pendingShot;
+        const pin = selectedPin;
         selectedElement = null;
+        selectedPin = undefined;
         pendingShot = null;
-        if (element) saveComment(element, value, shot);
+        if (element) saveComment(element, value, shot, pin);
         doDeactivate(true);
         return;
       }
@@ -749,16 +813,23 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       // The server treats a re-send from the same session as an edit.
       outbox?.send(ctx.entryId);
       showToast('Comment updated');
-      commentsPanel.show([...updated]);
+      if (editingFromMarker) endMarkerEdit();
+      else commentsPanel.show([...updated]);
     },
     onCancel(ctx) {
       if (ctx.mode === 'new') {
         selectedElement = null;
+        selectedPin = undefined;
         pendingShot = null;
         doDeactivate(true);
         return;
       }
-      commentsPanel.show([...comments()]);
+      if (editingFromMarker) endMarkerEdit();
+      else commentsPanel.show([...comments()]);
+    },
+    onDelete(ctx) {
+      endMarkerEdit();
+      if (ctx.entryId) removeComments([ctx.entryId], 'Comment deleted', true);
     },
   });
 
@@ -949,6 +1020,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       overlay.dispose();
       crosshair.dispose();
       freezeOverlay.dispose();
+      markers.dispose();
       disposeToast();
       disposeFeedbackStyles();
       pluginRegistry.dispose();
@@ -991,8 +1063,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         doDeactivate(true);
       }
     }
+    if (key === 'options') updateMarkers();
     if (key === 'toolbar') {
       updateToastOffset();
+      updateMarkers();
+      markers.refresh();
       if (state.options.persistHistory) {
         if (state.toolbar.comments.length > 0) {
           saveHistory(state.toolbar.comments);
@@ -1016,6 +1091,9 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   if (merged.webhookUrl) {
     api.registerPlugin(createWebhookPlugin(merged.webhookUrl));
   }
+
+  // The toolbar may already be showing (a live session); show its markers.
+  updateMarkers();
 
   return api;
 }

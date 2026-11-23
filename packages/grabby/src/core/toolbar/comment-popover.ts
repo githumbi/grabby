@@ -29,6 +29,8 @@ export interface CommentCtx {
 export interface CommentPopoverCallbacks {
   onSubmit(value: string, ctx: CommentCtx, identity?: IdentityChoice): void;
   onCancel(ctx: CommentCtx): void;
+  /** Editing only: shows a Delete button when provided. */
+  onDelete?(ctx: CommentCtx): void;
 }
 
 export interface CommentPopover {
@@ -112,6 +114,18 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
         font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 4px; border: none;
         background: transparent; color: var(--grabby-text-muted, #64748b); cursor: pointer; text-decoration: underline;
       }
+      #${POPOVER_ID} .grabby-cp-edit-actions { display: flex; align-items: center; gap: 6px; }
+      #${POPOVER_ID} .grabby-cp-edit-actions .grabby-cp-spacer { flex: 1; }
+      #${POPOVER_ID} .grabby-cp-delete {
+        font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 6px; border: none;
+        border-radius: 8px; background: transparent; color: #b91c1c; cursor: pointer;
+      }
+      #${POPOVER_ID} .grabby-cp-delete:hover { background: rgba(185, 28, 28, 0.08); }
+      #${POPOVER_ID} .grabby-cp-cancel {
+        font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 10px; border: none;
+        border-radius: 8px; background: transparent; color: var(--grabby-text-muted, #64748b); cursor: pointer;
+      }
+      #${POPOVER_ID} .grabby-cp-cancel:hover { background: var(--grabby-surface, #f1f5f9); }
       #${POPOVER_ID} .grabby-cp-hint {
         font-size: 11px;
         color: var(--grabby-text-muted, #94a3b8);
@@ -175,6 +189,35 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
   /** True for fields the user could legitimately be typing into instead. */
   function isEditable(el: Element | null): boolean {
     return !!el && el !== textarea && el !== nameInput && isEditableElement(el);
+  }
+
+  function save(): void {
+    const v = textarea?.value.trim();
+    if (!v) return;
+    pendingValue = v;
+    if (askIdentity) showIdentityStep();
+    else finish();
+  }
+
+  /** Editing a saved comment: Delete, Cancel and Save, since it's opened by a click. */
+  function editActions(): HTMLDivElement {
+    const act = (fn: () => void) => (e: Event) => { e.stopPropagation(); fn(); };
+    const cancel = () => {
+      const ctx = currentCtx;
+      doHide();
+      callbacks.onCancel(ctx);
+    };
+    const del = () => {
+      const ctx = currentCtx;
+      doHide();
+      callbacks.onDelete?.(ctx);
+    };
+    return h('div', { class: 'grabby-cp-edit-actions' },
+      callbacks.onDelete ? h('button', { type: 'button', class: 'grabby-cp-delete', 'data-grabby-delete': '', onclick: act(del) }, 'Delete') : null,
+      h('span', { class: 'grabby-cp-spacer' }),
+      h('button', { type: 'button', class: 'grabby-cp-cancel', 'data-grabby-cancel': '', onclick: act(cancel) }, 'Cancel'),
+      h('button', { type: 'button', class: 'grabby-cp-post', 'data-grabby-save': '', onclick: act(save) }, 'Save'),
+    );
   }
 
   function finish(identity?: IdentityChoice): void {
@@ -244,11 +287,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       e.stopImmediatePropagation();
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const v = textarea.value.trim();
-        if (!v) return;
-        pendingValue = v;
-        if (askIdentity) showIdentityStep();
-        else finish();
+        save();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         const ctx = currentCtx;
@@ -285,6 +324,7 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       currentCtx = { mode: opts.mode, entryId: opts.entryId };
       askIdentity = opts.askIdentity === true && opts.mode === 'new';
       visible = true;
+      if (opts.mode === 'edit') el.appendChild(editActions());
       position(el, opts.anchor);
       attachKey();
       // Focus now rather than only on a frame: an occluded or backgrounded tab

@@ -29,7 +29,8 @@ export interface ElementPickerDeps {
   isToolbarElement?: (el: Element) => boolean;
   getFreezeElement?: () => HTMLElement | null;
   onHover: (element: Element | null) => void;
-  onSelect: (element: Element) => void;
+  /** `point` is where the click landed, in viewport coordinates. */
+  onSelect: (element: Element, point: { x: number; y: number }) => void;
 }
 
 export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
@@ -115,7 +116,7 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     // another element; Save or Cancel ends the hold.
     if (heldElement) return;
     if (hoveredElement) {
-      deps.onSelect(hoveredElement);
+      deps.onSelect(hoveredElement, { x: e.clientX, y: e.clientY });
     }
   }
 
