@@ -9,11 +9,16 @@ export type CommentMode = 'new' | 'edit';
 
 export interface CommentShowOpts {
   anchor: Element | null;
+  /** Place next to this rectangle (viewport coordinates) instead of the anchor's box. */
+  anchorBox?: { left: number; top: number; right: number; bottom: number } | null;
   initialValue?: string;
   mode: CommentMode;
   entryId?: string;
   /** Ask who's commenting (name or anonymous) before saving. */
   askIdentity?: boolean;
+  /** What the comment is about, shown above the text box (e.g. "3 elements: …"). */
+  heading?: string;
+  placeholder?: string;
 }
 
 /** What the commenter chose on the identity step. */
@@ -114,6 +119,13 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
         font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 8px 4px; border: none;
         background: transparent; color: var(--grabby-text-muted, #64748b); cursor: pointer; text-decoration: underline;
       }
+      #${POPOVER_ID} .grabby-cp-heading {
+        font: 600 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #15803d;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       #${POPOVER_ID} .grabby-cp-edit-actions { display: flex; align-items: center; gap: 6px; }
       #${POPOVER_ID} .grabby-cp-edit-actions .grabby-cp-spacer { flex: 1; }
       #${POPOVER_ID} .grabby-cp-delete {
@@ -154,18 +166,18 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
     return popover;
   }
 
-  function position(el: HTMLDivElement, anchor: Element | null): void {
+  function position(el: HTMLDivElement, anchor: Element | null, box?: CommentShowOpts['anchorBox']): void {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const fW = 300;
     const fH = 120;
-    if (!anchor) {
+    if (!anchor && !box) {
       el.style.left = '50%';
       el.style.top = '24px';
       el.style.transform = 'translateX(-50%)';
       return;
     }
-    const rect = anchor.getBoundingClientRect();
+    const rect = box ? { ...box, width: box.right - box.left, height: box.bottom - box.top } : anchor!.getBoundingClientRect();
     let left: number; let top: number;
     if (rect.right + 16 + fW <= vw) {
       left = rect.right + 16;
@@ -324,8 +336,12 @@ export function createCommentPopover(callbacks: CommentPopoverCallbacks): Commen
       currentCtx = { mode: opts.mode, entryId: opts.entryId };
       askIdentity = opts.askIdentity === true && opts.mode === 'new';
       visible = true;
+      textarea!.placeholder = opts.placeholder ?? 'What should change here?';
+      if (opts.heading) {
+        el.prepend(h('div', { class: 'grabby-cp-heading', title: opts.heading }, opts.heading));
+      }
       if (opts.mode === 'edit') el.appendChild(editActions());
-      position(el, opts.anchor);
+      position(el, opts.anchor, opts.anchorBox);
       attachKey();
       // Focus now rather than only on a frame: an occluded or backgrounded tab
       // gets no frames, and without focus the textarea swallows nothing and

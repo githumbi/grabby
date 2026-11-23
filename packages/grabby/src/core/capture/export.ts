@@ -74,10 +74,20 @@ function header(comments: GrabbyComment[], env: ExportEnv, ctx: Context): string
   return lines;
 }
 
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+/** Where a multi-element comment's elements are, one short reference each. */
+function memberRefs(c: GrabbyComment, full: boolean): string {
+  return (c.members ?? []).map((m) => (m.source ? location(m.source.file, m.source.line, full) : m.selector)).join(', ');
+}
+
 function compactLine(c: GrabbyComment, i: number, ctx: Context): string {
   const t = c.target;
   const where = t.source ? location(t.source.file, t.source.line, true) : t.selector;
-  const parts = [where, t.component, `<${t.tag}>`].filter(Boolean).join(' ');
+  const own = [where, t.component, `<${t.tag}>`].filter(Boolean).join(' ');
+  const parts = c.members?.length
+    ? `[${c.members.length} elements] ${memberRefs(c, true)}`
+    : c.area ? `[area] in ${own}` : own;
   const who = ctx.showAuthors ? ` (${authorLabel(c.author)})` : '';
   const route = ctx.showRoutes ? ` [${c.page.route}]` : '';
   const id = ctx.showIds ? ` [id ${c.id}]` : '';
@@ -96,7 +106,21 @@ function detailBlock(c: GrabbyComment, i: number, ctx: Context, groupHasSource: 
   } else if (t.source?.line != null && groupHasSource) {
     where.push(`line ${t.source.line}`);
   }
+  if (c.members?.length) where.unshift('in');
+  if (c.area) where.unshift('area in');
   b(where.join(' '));
+
+  if (c.area) {
+    const a = c.area;
+    b(`region: ${pct(a.x)} from left, ${pct(a.y)} from top, ${pct(a.w)} wide, ${pct(a.h)} tall`);
+  }
+  if (c.members?.length) {
+    b(`${c.members.length} elements:`);
+    for (const m of c.members) {
+      const at = m.source ? location(m.source.file, m.source.line, full) : `selector \`${m.selector}\``;
+      lines.push(`     - \`${m.preview}\` (${m.kind})${m.component && m.component !== t.component ? ` ${m.component}` : ''} ${at}`);
+    }
+  }
 
   // A selector is only worth tokens when there's no file to point at.
   if (!t.source || full) b(`selector: \`${t.selector}\``);

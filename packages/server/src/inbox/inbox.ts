@@ -174,10 +174,17 @@ function card(c: Comment): HTMLElement {
         c.status === 'resolved' && h('span', { class: 'status resolved' }, 'Resolved'),
       ),
       h('div', { class: 'target' },
-        h('span', { class: 'chip' }, `${c.target.kind} · <${c.target.tag}>`),
+        c.members?.length
+          ? h('span', { class: 'chip group' }, `${c.members.length} elements`)
+          : c.area && h('span', { class: 'chip group' }, 'Area'),
+        h('span', { class: 'chip' }, `${c.members?.length ? 'in ' : ''}${c.target.kind} · <${c.target.tag}>`),
         c.target.component && h('span', { class: 'chip' }, c.target.component),
         where && h('code', { class: 'chip', title: 'Source file' }, where),
       ),
+      c.members?.length ? h('ul', { class: 'members' }, ...c.members.map((m) => h('li', null,
+        m.label || `<${m.tag}>`,
+        m.source?.file ? h('code', null, ` ${m.source.file.split(/[\\/]/).pop()}${m.source.line != null ? `:${m.source.line}` : ''}`) : null,
+      ))) : null,
       h('div', { class: 'actions' },
         c.status === 'open'
           ? h('button', { class: 'btn', type: 'button', onClick: () => setStatus(c, 'resolved') }, 'Mark resolved')

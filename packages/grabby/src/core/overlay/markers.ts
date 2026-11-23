@@ -136,6 +136,8 @@ export function createMarkers(deps: MarkersDeps): Markers {
         transition: transform 0.12s ease, box-shadow 0.15s ease;
       }
       .grabby-markers-layer .grabby-marker[hidden] { display: none; }
+      /* Several elements or an area: a green square, like the outline it shows. */
+      .grabby-markers-layer .grabby-marker.grabby-marker-group { border-radius: 6px; background: #16a34a; }
       .grabby-markers-layer .grabby-marker:hover,
       .grabby-markers-layer .grabby-marker:focus-visible {
         z-index: 1;
@@ -315,6 +317,7 @@ export function createMarkers(deps: MarkersDeps): Markers {
         host.appendChild(entry.button);
       }
       entry.comment = comment;
+      entry.button.classList.toggle('grabby-marker-group', !!(comment.members?.length || comment.area));
       const n = String(i + 1);
       entry.number.textContent = n;
       entry.button.setAttribute('aria-label', `Comment ${n}: ${preview(comment.comment)}. Click to edit.`);

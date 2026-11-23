@@ -11,7 +11,7 @@ pnpm 9 workspace + Turbo, Node 20+.
 | `packages/grabby` | `@githumbi/grabby`: browser toolbar, capture, framework adapters, build plugin, CLI (`init`, `share`, `inbox`, `alerts`, `add mcp`, `pull`) |
 | `packages/server` | `@githumbi/grabby-server`: the collector (`init`/`start`/`mcp`/`pull`/`deploy cloudflare`), REST API, inbox, alerts, MCP tools. Runs on Node (JSON file store) and as a Cloudflare Worker (D1) |
 | `examples/*` | `angular-19-app`, `react-vite`, `vue-vite`, `svelte-vite`, `plain-html` (`index.html` local mode, `live.html` live mode) |
-| `scripts/check-size.mjs` | bundle budgets: loader and `/live` ≤ 1 KB gzip, script build ≤ 48 KB, Worker (inbox included) ≤ 64 KB |
+| `scripts/check-size.mjs` | bundle budgets: loader and `/live` ≤ 1 KB gzip, script build ≤ 56 KB, Worker (inbox included) ≤ 64 KB |
 
 ```bash
 pnpm install && pnpm build && pnpm test   # all packages + examples

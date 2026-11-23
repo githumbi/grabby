@@ -1,4 +1,5 @@
 import type {
+  AreaBox,
   GrabbyOptions,
   GrabbyAPI,
   GrabbyComment,
@@ -28,13 +29,16 @@ import { consumeFeedbackLink, startFeedbackSession, endFeedbackSession } from '.
 import { getScreenshot } from './storage/screenshot-store';
 import { createFreezeOverlay } from './overlay/freeze-overlay';
 import { createMarkers } from './overlay/markers';
+import { createGroupOutline, type GroupSpec } from './overlay/group-outline';
+import { areaToBox, commonContainer, unionBox } from './picker/region';
+import { describeArea, describeComment, describeElement, describeGroup } from './capture/describe';
 import { showSelectFeedback, disposeFeedbackStyles } from './overlay/select-feedback';
 import { TOOLBAR_TOAST_OFFSET } from './constants';
 import { safeQuery } from './utils';
 import { isUiNode, eventTarget, isEditableElement, disposeUiRoot, setStyleNonce } from './ui/root';
 import { loadHistory, saveHistory, clearPersistedHistory, flushPendingWrite } from './storage/history-persistence';
 import { putScreenshot, deleteScreenshots } from './storage/screenshot-store';
-import { captureTarget } from './capture/capture';
+import { captureTarget, captureMember } from './capture/capture';
 import { captureScreenshot, disposeScreenshotSandbox, type Screenshot } from './capture/screenshot';
 import { formatExport } from './capture/export';
 import { sanitizeRoute } from './capture/redact';
@@ -224,6 +228,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
 
   // Reviewers on a live site may not be developers: name elements in plain words.
   const overlay = createOverlayRenderer({ plainLabels: live });
+  const groupOutline = createGroupOutline();
   const crosshair = createCrosshair();
   const freezeOverlay = createFreezeOverlay();
   const pluginRegistry = createPluginRegistry();
@@ -243,6 +248,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // it was clicked, before anything on the page can change.
   let selectedElement: Element | null = null;
   let selectedPin: { x: number; y: number } | undefined;
+  // A multi-element or area selection (selectedElement is then the element around it).
+  let selectedMembers: Element[] | null = null;
+  let selectedArea: AreaBox | null = null;
+  // Elements of multi-element comments made in this page view, for their marker's hover.
+  const commentedMembers = new Map<string, Element[]>();
   let pendingShot: Promise<Screenshot | null> | null = null;
   // Elements commented on in this page view, so markers survive selectors
   // that change between renders (generated ids, say).
@@ -326,7 +336,15 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   }
 
   // --- Saving a new comment ---
-  function saveComment(element: Element, text: string, shot: Promise<Screenshot | null> | null, pin?: { x: number; y: number }): GrabbyComment {
+  interface SaveExtras {
+    pin?: { x: number; y: number };
+    members?: Element[] | null;
+    area?: AreaBox | null;
+  }
+
+  function saveComment(element: Element, text: string, shot: Promise<Screenshot | null> | null, extras: SaveExtras = {}): GrabbyComment {
+    const { pin, members, area } = extras;
+    const deps = { componentResolver, sourceResolver, cleanClasses };
     const now = Date.now();
     const comment: GrabbyComment = {
       id: randomId(),
@@ -340,13 +358,16 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
         title: document.title,
         viewport: [window.innerWidth, window.innerHeight],
       },
-      target: captureTarget(element, { componentResolver, sourceResolver, cleanClasses }),
+      target: captureTarget(element, deps),
       screenshot: null,
       framework: adapters.frameworkFor(element),
       ...(outbox ? { sync: 'pending' as const } : {}),
       ...(pin ? { pin } : {}),
+      ...(members?.length ? { members: members.map((el) => captureMember(el, deps)) } : {}),
+      ...(area ? { area } : {}),
     };
     commentedElements.set(comment.id, element);
+    if (members?.length) commentedMembers.set(comment.id, members);
 
     setComments([comment, ...comments()].slice(0, MAX_COMMENTS));
     pluginRegistry.callHook('onComment', comment, element);
@@ -403,7 +424,10 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     const idSet = new Set(ids);
     const before = comments();
     const removed = before.filter((c) => idSet.has(c.id));
-    for (const id of ids) commentedElements.delete(id);
+    for (const id of ids) {
+      commentedElements.delete(id);
+      commentedMembers.delete(id);
+    }
     setComments(before.filter((c) => !idSet.has(c.id)));
 
     // Only comments from a live session (they carry a sync state) ever went
@@ -485,17 +509,60 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     commentPopover.hide();
     endMarkerEdit();
     if (picker.isHolding()) {
-      selectedElement = null;
-      selectedPin = undefined;
-      pendingShot = null;
+      clearSelection();
       picker.release();
     }
+  }
+
+  function clearSelection(): void {
+    selectedElement = null;
+    selectedPin = undefined;
+    selectedMembers = null;
+    selectedArea = null;
+    pendingShot = null;
   }
 
   function endMarkerEdit(): void {
     if (!editingFromMarker) return;
     editingFromMarker = false;
     overlay.hide();
+    groupOutline.hide();
+  }
+
+  /** Where in `el` a point is, as fractions of its box (for the marker). */
+  function pinIn(el: Element, point: { x: number; y: number }): { x: number; y: number } {
+    const rect = el.getBoundingClientRect();
+    const frac = (v: number, start: number, size: number) => (size > 0 ? Math.min(1, Math.max(0, (v - start) / size)) : 0.5);
+    return {
+      x: Math.round(frac(point.x, rect.left, rect.width) * 1000) / 1000,
+      y: Math.round(frac(point.y, rect.top, rect.height) * 1000) / 1000,
+    };
+  }
+
+  /** The green outline for a saved multi-element or area comment, if its elements are on the page. */
+  function groupSpecFor(comment: GrabbyComment, element: Element | null): { spec: GroupSpec; label: string } | null {
+    if (comment.area && element) return { spec: { element, area: comment.area }, label: 'Area' };
+    if (!comment.members?.length) return null;
+    const known = commentedMembers.get(comment.id)?.filter((el) => el.isConnected);
+    const elements = known?.length ? known : comment.members.flatMap((m) => safeQuery(m.selector) ?? []);
+    return elements.length ? { spec: { elements }, label: `${comment.members.length} elements` } : null;
+  }
+
+  /** Opens the comment box for a multi-element or area selection. */
+  function beginGroupComment(container: Element, point: { x: number; y: number }, spec: GroupSpec, heading: string, label: string, clip: { left: number; top: number; right: number; bottom: number } | null): void {
+    selectedElement = container;
+    selectedPin = pinIn(container, point);
+    pendingShot = store.state.options.screenshots ? captureScreenshot(container, clip ?? undefined) : null;
+    coachMark.dismiss();
+    picker.hold(container, { spec, label });
+    commentPopover.show({
+      anchor: container,
+      anchorBox: clip,
+      mode: 'new',
+      askIdentity: shouldAskIdentity(),
+      heading,
+      placeholder: 'What should change here?',
+    });
   }
 
   function closeAllPopovers(): void {
@@ -529,6 +596,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   const picker = createElementPicker({
     overlay,
     crosshair,
+    groupOutline,
     getComponentResolver: () => componentResolver,
     getSourceResolver: () => sourceResolver,
     isToolbarElement: isAnyToolbarElement,
@@ -541,12 +609,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
     onSelect(element, point) {
       selectedElement = element;
-      const rect = element.getBoundingClientRect();
-      const frac = (v: number, start: number, size: number) => (size > 0 ? Math.min(1, Math.max(0, (v - start) / size)) : 0.5);
-      selectedPin = {
-        x: Math.round(frac(point.x, rect.left, rect.width) * 1000) / 1000,
-        y: Math.round(frac(point.y, rect.top, rect.height) * 1000) / 1000,
-      };
+      selectedPin = pinIn(element, point);
       pendingShot = store.state.options.screenshots ? captureScreenshot(element) : null;
       pluginRegistry.callHook('onElementSelect', element);
       coachMark.dismiss();
@@ -554,6 +617,17 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       // Keep the highlight on this element while the comment is written.
       picker.hold(element);
       commentPopover.show({ anchor: element, mode: 'new', askIdentity: shouldAskIdentity() });
+    },
+    onSelectGroup(elements, point) {
+      selectedMembers = elements;
+      const heading = describeGroup(elements.map(describeElement));
+      for (const el of elements) pluginRegistry.callHook('onElementSelect', el);
+      beginGroupComment(commonContainer(elements), point, { elements }, heading, `${elements.length} elements`, unionBox(elements));
+    },
+    onSelectArea(container, area, point) {
+      selectedArea = area;
+      pluginRegistry.callHook('onElementSelect', container);
+      beginGroupComment(container, point, { element: container, area }, describeArea(describeElement(container)), 'Area', areaToBox(container, area));
     },
   });
 
@@ -569,8 +643,13 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     onHover(comment, element) {
       // Never disturb the highlight of a comment being written or edited.
       if (picker.isHolding() || editingFromMarker || commentPopover.isVisible()) return;
-      if (comment && element) overlay.show(element, comment.target.component, null, []);
-      else overlay.hide();
+      const group = comment ? groupSpecFor(comment, element) : null;
+      if (group) groupOutline.show(group.spec, group.label);
+      else if (comment && element) overlay.show(element, comment.target.component, null, []);
+      else {
+        overlay.hide();
+        groupOutline.hide();
+      }
     },
     onOpen(comment, element, marker) {
       // Mid-way through a new comment: finish that one first.
@@ -578,12 +657,17 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       closeAllPopovers();
       doDeactivate(true);
       editingFromMarker = true;
-      if (element) overlay.show(element, comment.target.component, null, []);
+      const group = groupSpecFor(comment, element);
+      if (group) groupOutline.show(group.spec, group.label);
+      else if (element) overlay.show(element, comment.target.component, null, []);
+      const spec = group?.spec;
       commentPopover.show({
         anchor: element ?? marker,
+        anchorBox: spec ? ('area' in spec ? areaToBox(spec.element, spec.area) : unionBox(spec.elements)) : null,
         initialValue: comment.comment,
         mode: 'edit',
         entryId: comment.id,
+        heading: comment.members?.length || comment.area ? describeComment(comment) : undefined,
       });
     },
   });
@@ -796,12 +880,10 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       if (identity) saveIdentity({ name: identity.name, anonymous: !identity.name });
       if (ctx.mode === 'new') {
         const element = selectedElement;
+        const extras = { pin: selectedPin, members: selectedMembers, area: selectedArea };
         const shot = pendingShot;
-        const pin = selectedPin;
-        selectedElement = null;
-        selectedPin = undefined;
-        pendingShot = null;
-        if (element) saveComment(element, value, shot, pin);
+        clearSelection();
+        if (element) saveComment(element, value, shot, extras);
         doDeactivate(true);
         return;
       }
@@ -818,9 +900,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
     onCancel(ctx) {
       if (ctx.mode === 'new') {
-        selectedElement = null;
-        selectedPin = undefined;
-        pendingShot = null;
+        clearSelection();
         doDeactivate(true);
         return;
       }
@@ -1021,6 +1101,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       crosshair.dispose();
       freezeOverlay.dispose();
       markers.dispose();
+      groupOutline.dispose();
       disposeToast();
       disposeFeedbackStyles();
       pluginRegistry.dispose();

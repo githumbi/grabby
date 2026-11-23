@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 const budgets = [
   ['packages/grabby/dist/loader.global.js', 1_024],
   ['packages/grabby/dist/live/index.js', 1_024],
-  ['packages/grabby/dist/grabby.global.js', 48 * 1024],
+  ['packages/grabby/dist/grabby.global.js', 56 * 1024],
   // The collector Worker, inbox included (Cloudflare's free limit is 3 MB).
   ['packages/server/dist/worker/worker.js', 64 * 1024],
 ];
