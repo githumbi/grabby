@@ -172,6 +172,69 @@ describe('commenting and copying', () => {
   });
 });
 
+describe('the element stays selected while commenting', () => {
+  let api: GrabbyAPI;
+
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '<button id="first" class="first">First</button><button id="second" class="second">Second</button>';
+    api = init({ screenshots: false });
+  });
+
+  afterEach(() => {
+    api.dispose();
+    document.body.innerHTML = '';
+    disposeUiRoot();
+    localStorage.clear();
+  });
+
+  const move = () => document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 1, clientY: 1 }));
+  const label = () => queryUi('#__grabby-label__')?.textContent ?? '';
+
+  it('moving the mouse or clicking elsewhere does not move the comment to another element', async () => {
+    const first = document.getElementById('first')!;
+    const second = document.getElementById('second')!;
+    document.elementFromPoint = () => first;
+    api.activate();
+    move();
+    first.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    const textarea = queryUi<HTMLTextAreaElement>('textarea')!;
+    expect(label()).toContain('first');
+    expect(document.body.classList.contains('grabby-crosshair-held')).toBe(true);
+
+    // The reviewer moves away and even clicks another element mid-comment.
+    document.elementFromPoint = () => second;
+    move();
+    expect(label()).toContain('first');
+    expect(label()).not.toContain('second');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    second.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true); // the page doesn't act on it
+    expect(queryUi<HTMLTextAreaElement>('textarea')).toBe(textarea);
+
+    textarea.value = 'Rename this';
+    textarea.focus();
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.getComments().map((c) => [c.comment, c.target.selector])).toEqual([['Rename this', '#first']]);
+    expect(document.body.classList.contains('grabby-crosshair-held')).toBe(false);
+  });
+
+  it('after Cancel, the highlight follows the mouse again', () => {
+    const first = document.getElementById('first')!;
+    const second = document.getElementById('second')!;
+    document.elementFromPoint = () => first;
+    api.activate();
+    move();
+    first.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    queryUi<HTMLTextAreaElement>('textarea')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, composed: true }));
+    api.activate();
+    document.elementFromPoint = () => second;
+    move();
+    expect(label()).toContain('second');
+  });
+});
+
 describe('keyboard use while selecting', () => {
   it('lets a keyboard-activated button inside Grabby work during selection', async () => {
     document.body.innerHTML = '<button id="save">Save</button>';

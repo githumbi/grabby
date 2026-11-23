@@ -150,9 +150,29 @@ describe('live review', () => {
     expect(queryUi('#__grabby-toolbar__')!.classList.contains('grabby-toolbar-hidden')).toBe(false);
   });
 
-  it('closing the toolbar with unsent comments opens the summary instead of leaving', async () => {
-    await comment(document.getElementById('buy')!, 'Make it green');
+  it('close collapses the toolbar to a corner button that opens it again', async () => {
+    await comment(document.getElementById('buy')!, 'Make it green'); // server down: pending
+    const bar = queryUi('#__grabby-toolbar__')!;
     queryUi<HTMLButtonElement>('[data-grabby-btn="dismiss"]')!.click();
-    expect(queryUi('[aria-label="Finish review"]')).not.toBeNull();
+    expect(bar.classList.contains('grabby-toolbar-collapsed')).toBe(true);
+    expect(bar.classList.contains('grabby-toolbar-hidden')).toBe(false);
+    expect(queryUi('[aria-label="Finish review"]')).toBeNull();
+    expect(api.getComments()).toHaveLength(1); // still on its way
+    expect(queryUi('[data-grabby-btn="expand"] .grabby-badge')?.textContent).toBe('1');
+    expect(sessionStorage.getItem('grabby:v1:collapsed')).toBe('1');
+
+    queryUi<HTMLButtonElement>('[data-grabby-btn="expand"]')!.click();
+    expect(bar.classList.contains('grabby-toolbar-collapsed')).toBe(false);
+    expect(sessionStorage.getItem('grabby:v1:collapsed')).toBeNull();
+  });
+
+  it('stays collapsed on the next page, and opens when selection mode starts', () => {
+    queryUi<HTMLButtonElement>('[data-grabby-btn="dismiss"]')!.click();
+    api.dispose();
+    api = createGrabInstance({ mode: 'live', server: 'https://feedback.test', projectKey: 'pk_x', identity: 'anonymous', screenshots: false });
+    const bar = queryUi('#__grabby-toolbar__')!;
+    expect(bar.classList.contains('grabby-toolbar-collapsed')).toBe(true);
+    api.activate();
+    expect(bar.classList.contains('grabby-toolbar-collapsed')).toBe(false);
   });
 });
