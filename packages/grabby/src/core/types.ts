@@ -76,6 +76,11 @@ export interface GrabbyComment {
   framework: string;
   /** Delivery to a Grabby server, when one is configured. Browser-only. */
   sync?: 'pending' | 'sent' | 'failed';
+  /**
+   * Where on the element the reviewer clicked, as fractions of its width and
+   * height; the numbered marker sits there. Browser-only, never exported.
+   */
+  pin?: { x: number; y: number };
 }
 
 export interface ToolbarState {

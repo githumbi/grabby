@@ -116,8 +116,8 @@ export function createOutbox(deps: OutboxDeps): Outbox {
 
   /** Strips what only makes sense in this browser before it leaves. */
   function wireShape(c: GrabbyComment) {
-    const { screenshot: _shot, sync: _sync, ...rest } = c as GrabbyComment & { sync?: unknown };
-    void _shot; void _sync;
+    const { screenshot: _shot, sync: _sync, pin: _pin, ...rest } = c as GrabbyComment & { sync?: unknown };
+    void _shot; void _sync; void _pin;
     return rest;
   }
 

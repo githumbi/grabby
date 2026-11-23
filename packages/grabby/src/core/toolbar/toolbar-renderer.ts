@@ -5,6 +5,10 @@ import { ICON_GRAB, ICON_HISTORY, ICON_POWER, ICON_DISMISS } from './toolbar-ico
 import { svgIcon, type IconSpec } from '../ui/dom';
 
 const TOOLBAR_ID = '__grabby-toolbar__';
+/** Collapsed: a round button this wide (the toolbar's own height), 20px from the right edge. */
+const COLLAPSED_SIZE = 42;
+const EASE_OUT_EXPO = 'cubic-bezier(0.19, 1, 0.22, 1)';
+const MORPH_MS = 360;
 const STYLE_ID = '__grabby-toolbar-styles__';
 
 export interface ToolbarCallbacks {
@@ -64,7 +68,14 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
   let badge: HTMLSpanElement | null = null;
   let status: HTMLSpanElement | null = null;
   let expandBadge: HTMLSpanElement | null = null;
+  let content: HTMLDivElement | null = null;
   let collapsed = false;
+  let morphTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearMorph(): void {
+    if (morphTimer) clearTimeout(morphTimer);
+    morphTimer = null;
+  }
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -86,7 +97,21 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         box-shadow: 0 4px 16px var(--grabby-toolbar-shadow, rgba(0, 0, 0, 0.12));
         pointer-events: auto;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        transition: opacity 0.2s ease, transform 0.2s ease;
+        box-sizing: border-box;
+        height: ${COLLAPSED_SIZE}px;
+        overflow: hidden;
+        justify-content: flex-end;
+        transition: opacity 0.2s ease, transform 0.2s ease,
+          left ${MORPH_MS}ms ${EASE_OUT_EXPO}, width ${MORPH_MS}ms ${EASE_OUT_EXPO};
+      }
+      #${TOOLBAR_ID} .grabby-toolbar-content {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-shrink: 0;
+        transform-origin: right center;
+        transition: opacity 0.24s ease-out, filter 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.42s ${EASE_OUT_EXPO}, visibility 0s;
       }
       #${TOOLBAR_ID}.grabby-toolbar-hidden {
         opacity: 0;
@@ -182,23 +207,44 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         background: var(--grabby-accent-hover, #1d4ed8);
         color: #fff;
       }
-      #${TOOLBAR_ID} button.grabby-btn-expand { display: none; }
+      #${TOOLBAR_ID} button.grabby-btn-expand {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        translate: -50% -50%;
+        color: var(--grabby-accent, #2563eb);
+        opacity: 0;
+        scale: 0.6;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.2s ease-out, scale 0.3s ${EASE_OUT_EXPO}, visibility 0s 0.2s;
+      }
+      #${TOOLBAR_ID} button.grabby-btn-expand .grabby-badge { top: -3px; right: -5px; }
       #${TOOLBAR_ID}.grabby-toolbar-collapsed {
-        left: auto;
-        right: 20px;
-        transform: none;
+        left: calc(100% - 20px - ${COLLAPSED_SIZE / 2}px);
         padding: 4px;
       }
-      #${TOOLBAR_ID}.grabby-toolbar-collapsed.grabby-toolbar-hidden {
-        transform: translateY(20px);
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed .grabby-toolbar-content {
+        opacity: 0;
+        filter: blur(6px);
+        transform: scale(0.4);
+        pointer-events: none;
+        visibility: hidden;
+        transition: opacity 0.24s ease-out, filter 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.42s ${EASE_OUT_EXPO}, visibility 0s 0.3s;
       }
-      #${TOOLBAR_ID}.grabby-toolbar-collapsed > * { display: none !important; }
-      #${TOOLBAR_ID}.grabby-toolbar-collapsed > button.grabby-btn-expand {
-        display: flex !important;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        color: var(--grabby-accent, #2563eb);
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed button.grabby-btn-expand {
+        opacity: 1;
+        scale: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transition: opacity 0.24s ease-out 0.08s, scale 0.36s ${EASE_OUT_EXPO} 0.08s, visibility 0s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #${TOOLBAR_ID}, #${TOOLBAR_ID} .grabby-toolbar-content, #${TOOLBAR_ID} button.grabby-btn-expand {
+          transition-duration: 0s !important;
+          transition-delay: 0s !important;
+        }
       }
       #${TOOLBAR_ID} .grabby-toolbar-left.grabby-toolbar-left-hidden {
         max-width: 0;
@@ -262,7 +308,9 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     leftGroup.appendChild(buttons.history);
     leftGroup.appendChild(divider);
 
-    container.appendChild(leftGroup);
+    content = document.createElement('div');
+    content.className = 'grabby-toolbar-content';
+    content.appendChild(leftGroup);
     if (options.review) {
       status = document.createElement('span');
       status.className = 'grabby-toolbar-status';
@@ -279,14 +327,17 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         e.stopPropagation();
         callbacks.onFinish?.();
       });
-      container.appendChild(status);
-      container.appendChild(buttons.finish);
+      content.appendChild(status);
+      content.appendChild(buttons.finish);
       allElements.add(status);
     }
-    if (!options.hideEnable) container.appendChild(buttons.enable);
-    container.appendChild(buttons.dismiss);
-    container.appendChild(buttons.expand);
-    container.classList.toggle('grabby-toolbar-collapsed', collapsed);
+    if (!options.hideEnable) content.appendChild(buttons.enable);
+    content.appendChild(buttons.dismiss);
+    container.append(content, buttons.expand);
+    if (collapsed) {
+      container.classList.add('grabby-toolbar-collapsed');
+      container.style.width = `${COLLAPSED_SIZE}px`;
+    }
 
     getUiRoot().appendChild(container);
 
@@ -294,6 +345,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     allElements.clear();
     allElements.add(container);
     allElements.add(leftGroup);
+    allElements.add(content);
     allElements.add(divider);
     for (const btn of Object.values(buttons)) {
       allElements.add(btn);
@@ -347,13 +399,35 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     },
 
     collapse(): void {
+      if (collapsed) return;
       collapsed = true;
-      container?.classList.add('grabby-toolbar-collapsed');
+      if (!container) return;
+      // Width can't animate from auto: pin the current width, then shrink.
+      clearMorph();
+      container.style.width = `${container.offsetWidth}px`;
+      void container.offsetWidth;
+      container.classList.add('grabby-toolbar-collapsed');
+      container.style.width = `${COLLAPSED_SIZE}px`;
     },
 
     expand(): void {
+      if (!collapsed) return;
       collapsed = false;
-      container?.classList.remove('grabby-toolbar-collapsed');
+      if (!container) return;
+      clearMorph();
+      container.classList.remove('grabby-toolbar-collapsed');
+      // The open width is the button row's own width (transforms don't affect
+      // it) plus the toolbar's padding and border. Measuring it this way
+      // leaves the position free to glide back to the centre with the width.
+      const cs = getComputedStyle(container);
+      const chrome = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+        .reduce((sum, k) => sum + (parseFloat(cs[k as 'paddingLeft']) || 0), 0);
+      container.style.width = `${(content?.offsetWidth ?? 0) + chrome}px`;
+      // Back to auto afterwards, so the toolbar fits a status or Finish button that appears later.
+      morphTimer = setTimeout(() => {
+        morphTimer = null;
+        if (!collapsed && container) container.style.width = '';
+      }, MORPH_MS + 40);
     },
 
     isCollapsed(): boolean {
@@ -374,10 +448,12 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     },
 
     dispose(): void {
+      clearMorph();
       container?.remove();
       removeStyles(STYLE_ID);
       container = null;
       leftGroup = null;
+      content = null;
       buttons = {};
       badge = null;
       expandBadge = null;
