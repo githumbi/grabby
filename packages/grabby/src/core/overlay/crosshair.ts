@@ -9,6 +9,12 @@ const V_LINE_ID = '__grabby-crosshair-v__';
 export interface Crosshair {
   activate(): void;
   deactivate(): void;
+  /**
+   * While a comment is being written: hide the lines and show the normal
+   * cursor, but keep `body.grabby-crosshair-active` so pages that guard
+   * their own pointer handlers while Grabby picks stay guarded.
+   */
+  hold(on: boolean): void;
   isCrosshairElement(el: Element): boolean;
   dispose(): void;
 }
@@ -17,6 +23,7 @@ export function createCrosshair(): Crosshair {
   let hLine: HTMLDivElement | null = null;
   let vLine: HTMLDivElement | null = null;
   let listening = false;
+  let held = false;
 
   function injectStyles(): void {
     if (hasStyles(CROSSHAIR_STYLE_ID)) return;
@@ -42,7 +49,7 @@ export function createCrosshair(): Crosshair {
       }
     `);
     // The cursor rule targets the page itself, so it can't live in the shadow root.
-    addStyles(CURSOR_STYLE_ID, 'body.grabby-crosshair-active { cursor: crosshair !important; }', 'document');
+    addStyles(CURSOR_STYLE_ID, 'body.grabby-crosshair-active:not(.grabby-crosshair-held) { cursor: crosshair !important; }', 'document');
   }
 
   function ensureElements(): void {
@@ -61,7 +68,13 @@ export function createCrosshair(): Crosshair {
     }
   }
 
+  function hideLines(): void {
+    if (hLine) hLine.style.top = '-10px';
+    if (vLine) vLine.style.left = '-10px';
+  }
+
   function handleMouseMove(e: MouseEvent): void {
+    if (held) return;
     if (hLine) {
       hLine.style.top = `${e.clientY}px`;
     }
@@ -84,8 +97,14 @@ export function createCrosshair(): Crosshair {
       listening = false;
       document.body.classList.remove('grabby-crosshair-active');
       document.removeEventListener('mousemove', handleMouseMove, true);
-      if (hLine) hLine.style.top = '-10px';
-      if (vLine) vLine.style.left = '-10px';
+      hideLines();
+    },
+
+    hold(on: boolean): void {
+      if (held === on) return;
+      held = on;
+      document.body.classList.toggle('grabby-crosshair-held', on);
+      if (on) hideLines();
     },
 
     isCrosshairElement(el: Element): boolean {
@@ -94,6 +113,7 @@ export function createCrosshair(): Crosshair {
     },
 
     dispose(): void {
+      this.hold(false);
       this.deactivate();
       hLine?.remove();
       vLine?.remove();

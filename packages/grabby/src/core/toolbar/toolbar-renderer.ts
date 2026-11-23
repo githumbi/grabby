@@ -13,12 +13,18 @@ export interface ToolbarCallbacks {
   onEnableToggle: () => void;
   onDismiss: () => void;
   onFinish?: () => void;
+  /** The collapsed button was clicked: open the toolbar again. */
+  onExpand?: () => void;
 }
 
 export interface ToolbarRenderer {
   show(): void;
   hide(): void;
   update(state: GrabState): void;
+  /** Shrink to one round button in the bottom-right corner. */
+  collapse(): void;
+  expand(): void;
+  isCollapsed(): boolean;
   isToolbarElement(el: Element): boolean;
   dispose(): void;
 }
@@ -28,6 +34,8 @@ export interface ToolbarOptions {
   label?: string;
   /** Tooltip for the close button. */
   dismissLabel?: string;
+  /** Tooltip for the collapsed button that opens the toolbar again. */
+  expandLabel?: string;
   /** Leave out the enable/disable switch (reviewers on a live site don't need it). */
   hideEnable?: boolean;
   /** Show delivery status and a "Finish review" button (live mode). */
@@ -55,6 +63,8 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
   let allElements = new Set<Element>();
   let badge: HTMLSpanElement | null = null;
   let status: HTMLSpanElement | null = null;
+  let expandBadge: HTMLSpanElement | null = null;
+  let collapsed = false;
 
   function injectStyles(): void {
     if (hasStyles(STYLE_ID)) return;
@@ -172,6 +182,24 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         background: var(--grabby-accent-hover, #1d4ed8);
         color: #fff;
       }
+      #${TOOLBAR_ID} button.grabby-btn-expand { display: none; }
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed {
+        left: auto;
+        right: 20px;
+        transform: none;
+        padding: 4px;
+      }
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed.grabby-toolbar-hidden {
+        transform: translateY(20px);
+      }
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed > * { display: none !important; }
+      #${TOOLBAR_ID}.grabby-toolbar-collapsed > button.grabby-btn-expand {
+        display: flex !important;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        color: var(--grabby-accent, #2563eb);
+      }
       #${TOOLBAR_ID} .grabby-toolbar-left.grabby-toolbar-left-hidden {
         max-width: 0;
         opacity: 0;
@@ -218,6 +246,13 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     buttons.enable = createButton('enable', ICON_POWER, 'Enable/Disable', callbacks.onEnableToggle);
     buttons.dismiss = createButton('dismiss', ICON_DISMISS, options.dismissLabel ?? 'Dismiss toolbar', callbacks.onDismiss);
 
+    buttons.expand = createButton('expand', ICON_GRAB, options.expandLabel ?? 'Open Grabby toolbar', () => callbacks.onExpand?.());
+    buttons.expand.classList.add('grabby-btn-expand');
+    expandBadge = document.createElement('span');
+    expandBadge.className = 'grabby-badge';
+    expandBadge.hidden = true;
+    buttons.expand.appendChild(expandBadge);
+
     const divider = document.createElement('span');
     divider.className = 'grabby-toolbar-divider';
 
@@ -250,6 +285,8 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
     }
     if (!options.hideEnable) container.appendChild(buttons.enable);
     container.appendChild(buttons.dismiss);
+    container.appendChild(buttons.expand);
+    container.classList.toggle('grabby-toolbar-collapsed', collapsed);
 
     getUiRoot().appendChild(container);
 
@@ -285,9 +322,10 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
       }
 
       const count = state.toolbar.comments.length;
-      if (badge) {
-        badge.hidden = count === 0;
-        badge.textContent = count > 99 ? '99+' : String(count);
+      for (const b of [badge, expandBadge]) {
+        if (!b) continue;
+        b.hidden = count === 0;
+        b.textContent = count > 99 ? '99+' : String(count);
       }
       buttons.history.setAttribute('aria-label', count ? `Comments (${count})` : 'Comments');
 
@@ -306,6 +344,20 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
         buttons.enable.classList.remove('grabby-btn-active');
         leftGroup?.classList.add('grabby-toolbar-left-hidden');
       }
+    },
+
+    collapse(): void {
+      collapsed = true;
+      container?.classList.add('grabby-toolbar-collapsed');
+    },
+
+    expand(): void {
+      collapsed = false;
+      container?.classList.remove('grabby-toolbar-collapsed');
+    },
+
+    isCollapsed(): boolean {
+      return collapsed;
     },
 
     isToolbarElement(el: Element): boolean {
@@ -328,6 +380,7 @@ export function createToolbarRenderer(callbacks: ToolbarCallbacks, options: Tool
       leftGroup = null;
       buttons = {};
       badge = null;
+      expandBadge = null;
       status = null;
       allElements.clear();
     },

@@ -9,6 +9,14 @@ import { IGNORE_ATTR } from '../capture/preview';
 export interface ElementPicker {
   activate(): void;
   deactivate(): void;
+  /**
+   * Pin the highlight to `element` while its comment is being written: the
+   * mouse no longer moves it, and clicks on the page can't pick another one.
+   */
+  hold(element: Element): void;
+  /** Back to picking with the mouse. */
+  release(): void;
+  isHolding(): boolean;
   getHoveredElement(): Element | null;
   dispose(): void;
 }
@@ -26,6 +34,7 @@ export interface ElementPickerDeps {
 
 export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
   let hoveredElement: Element | null = null;
+  let heldElement: Element | null = null;
   let listening = false;
 
   function resolveComponentName(el: Element): string | null {
@@ -70,7 +79,15 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     return exact ? raw : promoteTarget(raw);
   }
 
+  function showOverlay(target: Element): void {
+    const componentName = resolveComponentName(target);
+    const sourcePath = resolveSourcePath(target);
+    const cssClasses = filterAngularClasses(target.classList);
+    deps.overlay.show(target, componentName, sourcePath, cssClasses);
+  }
+
   function handleMouseMove(e: MouseEvent): void {
+    if (heldElement) return;
     const target = elementAtPoint(e.clientX, e.clientY, e.shiftKey);
     if (!target || deps.overlay.isOverlayElement(target)) return;
     if (deps.crosshair.isCrosshairElement(target)) return;
@@ -78,10 +95,7 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     if (target === hoveredElement) return;
 
     hoveredElement = target;
-    const componentName = resolveComponentName(target);
-    const sourcePath = resolveSourcePath(target);
-    const cssClasses = filterAngularClasses(target.classList);
-    deps.overlay.show(target, componentName, sourcePath, cssClasses);
+    showOverlay(target);
     deps.onHover(target);
   }
 
@@ -97,6 +111,9 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
     e.preventDefault();
     e.stopPropagation();
 
+    // Mid-comment, a click on the page must not switch the comment to
+    // another element; Save or Cancel ends the hold.
+    if (heldElement) return;
     if (hoveredElement) {
       deps.onSelect(hoveredElement);
     }
@@ -115,11 +132,31 @@ export function createElementPicker(deps: ElementPickerDeps): ElementPicker {
       if (!listening) return;
       listening = false;
       hoveredElement = null;
+      heldElement = null;
+      deps.crosshair.hold(false);
       deps.crosshair.deactivate();
       document.removeEventListener('mousemove', handleMouseMove, true);
       document.removeEventListener('click', handleClick, true);
       deps.overlay.hide();
       deps.onHover(null);
+    },
+
+    hold(element: Element): void {
+      if (!listening) return;
+      heldElement = element;
+      hoveredElement = element;
+      deps.crosshair.hold(true);
+      showOverlay(element);
+    },
+
+    release(): void {
+      if (!heldElement) return;
+      heldElement = null;
+      deps.crosshair.hold(false);
+    },
+
+    isHolding(): boolean {
+      return heldElement !== null;
     },
 
     getHoveredElement(): Element | null {

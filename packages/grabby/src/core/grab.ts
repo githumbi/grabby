@@ -127,6 +127,19 @@ function flushLeftovers(options: Partial<GrabbyOptions>): Outbox | null {
   });
 }
 
+const COLLAPSED_KEY = 'grabby:v1:collapsed';
+
+function loadCollapsed(): boolean {
+  try { return sessionStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
+}
+
+function saveCollapsed(on: boolean): void {
+  try {
+    if (on) sessionStorage.setItem(COLLAPSED_KEY, '1');
+    else sessionStorage.removeItem(COLLAPSED_KEY);
+  } catch { /* private mode: lasts for this page only */ }
+}
+
 declare const ngDevMode: unknown;
 declare const process: { env: Record<string, string | undefined> };
 
@@ -230,6 +243,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   let selectedElement: Element | null = null;
   let pendingShot: Promise<Screenshot | null> | null = null;
   let level = loadLevel(merged.detailLevel);
+  // Close shrinks the toolbar to a corner button; remembered for the tab.
+  let collapsed = loadCollapsed();
 
   // Screenshot deletions wait out the Undo window.
   const pendingShotDeletes = new Map<string, ReturnType<typeof setTimeout>>();
@@ -451,9 +466,23 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     return isUiNode(el) || freezeOverlay.isFreezeElement(el);
   }
 
+  /**
+   * Closing the comment box any way other than Save or Cancel (opening the
+   * comments list, clicking outside) drops the half-made comment and its
+   * held element, so the picker follows the mouse again.
+   */
+  function hideCommentPopover(): void {
+    commentPopover.hide();
+    if (picker.isHolding()) {
+      selectedElement = null;
+      pendingShot = null;
+      picker.release();
+    }
+  }
+
   function closeAllPopovers(): void {
     commentsPanel.hide();
-    commentPopover.hide();
+    hideCommentPopover();
     copySheet.close();
     finishSheet.close();
   }
@@ -498,6 +527,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       pluginRegistry.callHook('onElementSelect', element);
       coachMark.dismiss();
       showSelectFeedback(element);
+      // Keep the highlight on this element while the comment is written.
+      picker.hold(element);
       commentPopover.show({ anchor: element, mode: 'new', askIdentity: shouldAskIdentity() });
     },
   });
@@ -511,6 +542,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       toolbar.show();
     }
 
+    if (collapsed) expandToolbar();
     closeAllPopovers();
     store.state.active = true;
     picker.activate();
@@ -554,7 +586,7 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
     },
 
     onHistory() {
-      commentPopover.hide();
+      hideCommentPopover();
       copySheet.close();
       if (commentsPanel.isVisible()) {
         commentsPanel.hide();
@@ -573,18 +605,33 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
       toolbar.update(store.state);
     },
 
-    onDismiss() {
-      // Don't let a reviewer walk away from comments that haven't arrived.
-      const { pending, failed } = reviewCounts();
-      if (live && outbox && (pending || failed)) {
-        openFinishSheet();
-        return;
-      }
-      exitFeedbackMode();
-    },
+    // Close collapses the toolbar into a round button in the bottom-right
+    // corner instead of removing it, so nothing is lost and it's one click
+    // back. Comments keep sending while it's collapsed.
+    onDismiss: collapseToolbar,
+    onExpand: expandToolbar,
 
     onFinish: openFinishSheet,
-  }, live ? { label: 'Comment', dismissLabel: 'Exit feedback mode', hideEnable: true, review: !!merged.server } : {});
+  }, live
+    ? { label: 'Comment', dismissLabel: 'Hide toolbar', expandLabel: 'Leave feedback', hideEnable: true, review: !!merged.server }
+    : { dismissLabel: 'Hide toolbar', expandLabel: 'Open Grabby toolbar' });
+
+  function collapseToolbar(): void {
+    closeAllPopovers();
+    coachMark.dismiss();
+    doDeactivate(true);
+    collapsed = true;
+    toolbar.collapse();
+    saveCollapsed(true);
+    updateToastOffset();
+  }
+
+  function expandToolbar(): void {
+    collapsed = false;
+    toolbar.expand();
+    saveCollapsed(false);
+    updateToastOffset();
+  }
 
   // --- Comments panel ---
   const commentsPanel = createCommentsPanel({
@@ -749,7 +796,8 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   window.addEventListener('beforeunload', handleBeforeUnload);
 
   function updateToastOffset(): void {
-    if (store.state.toolbar.visible) {
+    // The collapsed button sits in the corner, clear of centred toasts.
+    if (store.state.toolbar.visible && !collapsed) {
       document.documentElement.style.setProperty('--grabby-toast-bottom', TOOLBAR_TOAST_OFFSET);
     } else {
       document.documentElement.style.removeProperty('--grabby-toast-bottom');
@@ -927,9 +975,11 @@ export function createGrabInstance(options?: Partial<GrabbyOptions>): GrabbyAPI 
   // Locally the toolbar appears when selection mode is first used. A live
   // feedback session shows it straight away, with first-visit tips.
   store.state.toolbar = { ...store.state.toolbar, visible: false };
+  // Collapsed earlier in this tab: stay collapsed across pages.
+  if (collapsed) toolbar.collapse();
   if (live && merged.showToolbar) {
     api.showToolbar();
-    coachMark.maybeShow();
+    if (!collapsed) coachMark.maybeShow();
   }
 
   store.subscribe((state, key) => {
