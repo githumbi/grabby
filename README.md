@@ -91,6 +91,13 @@ Reviewers get a **Comment** button and a short three-step tip. As they move the 
 2. Click the part of the page they want to talk about.
 3. Type what should change and press **Enter**.
 
+The part they clicked stays highlighted while they type, so it's always clear what the comment is about. A few more things reviewers can do:
+
+- **Comment on several things at once.** Press and drag a box across them: everything inside is outlined in green, and one comment covers it all ("3 elements: Button "Approve", Button "Reject", Text "Total""). Or hold **⌘** (Ctrl on Windows) and click each one, then let go of the key.
+- **Comment on an empty space.** Drag a box over a gap ("put a chart here"): the comment is about that area.
+- **See and edit what they've said.** Every comment leaves a numbered marker where they clicked (a green square for several elements or an area). Hover it to read the comment; click it to edit or delete. Markers belong to the page they were left on: they hide on other pages and come back when the reviewer returns.
+- **Get the toolbar out of the way.** The **×** shrinks it to a round button in the bottom-right corner; one click brings it back.
+
 After their first comment, Grabby asks who it's from: a name, or **Post anonymously**. The choice is remembered, and anonymous reviewers still get a stable id, so you can tell "Anonymous 3f9a" from "Anonymous b21c". If your app already knows who's signed in, skip the question with `grabby.identify({ id, name })`.
 
 <p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/live-identity.png" alt="After a comment, Grabby asks: Thanks! Who is this from? with a name field, Post anonymously and Post" width="820"></p>
@@ -105,7 +112,7 @@ Each comment is sent as soon as it's saved. It's kept in the reviewer's browser 
 
 - its screenshot (click to enlarge),
 - who left it, the page and when,
-- the element and where it lives in your code, such as `PlanCard` in `src/PlanCard.tsx:15`.
+- the element and where it lives in your code, such as `PlanCard` in `src/PlanCard.tsx:15`; for a comment on several elements, each of them with its file and line.
 
 Mark comments **resolved** once they're handled, **delete** them, or click **Copy all for AI** and paste the result into your AI agent. The inbox works on any device, including your phone. Treat the link like a password: anyone with it can read the feedback.
 
@@ -204,6 +211,16 @@ Grabby looks at *what kind* of element you clicked and keeps only what matters f
 | **Media** | alt text (or that it's missing), file name, rendered vs natural size |
 | **Container / card** | heading, a summary of what's inside ("heading, 3× PlanCard, button"), layout styles |
 | **Page section** | page title, viewport, regions and components on the page. No HTML. |
+
+A comment can also cover **several elements** (dragged across, or ⌘/Ctrl-clicked) or an **area** (dragged over empty space). It then describes the element around them in full, plus a short line for each element (or where the area sits inside it), and the screenshot shows just the selection:
+
+```text
+4. Make these the same width
+   - in `<div class="actions">` (container) Actions
+   - 2 elements:
+     - `<button>Approve</button>` (action) Actions.tsx:12
+     - `<button>Reject</button>` (action) Actions.tsx:13
+```
 
 Every comment also carries the component, source file and line, up to three of *your* components above it (library frames are skipped), a trimmed HTML preview capped at 300 characters, and a screenshot. Styles are compared against browser defaults, so only the values your code set are reported.
 
@@ -327,6 +344,8 @@ Start your dev server as usual. The Grabby toolbar appears the first time you pr
 2. Hover: every element shows its component and source file, like the picture at the top. Click the one you want to change. Clicking an icon inside a button selects the button; hold **Shift** to pick the exact inner element.
 3. Type what should change and press **Enter**. Grabby saves it with a screenshot.
 
+To cover several elements in one comment, drag a box across them, or hold **⌘** (Ctrl on Windows and Linux) and click each one, then let go of the key. Dragging over empty space comments on that area. Each comment leaves a numbered marker on the page; click it to edit.
+
 <p align="center"><img src="https://raw.githubusercontent.com/githumbi/grabby/main/docs/images/dev-comment.png" alt="The comment box open next to the Choose Pro button, with a comment typed in" width="820"></p>
 
 4. Keep going. The badge on the clock icon counts your comments, and the list shows them with thumbnails, their kind and file. Click one to edit it.
@@ -360,6 +379,8 @@ That's the whole export: no page dumps, around 150–300 tokens per comment. To 
 |---|---|
 | Option+G / Alt+G | Toggle selection mode |
 | F | Freeze the page while selecting, to grab menus, tooltips and hover states |
+| Drag | Select several elements, or an empty area, for one comment |
+| ⌘-click / Ctrl-click | Add an element to a group; release the key to comment on them together |
 | Enter / Shift+Enter | Save comment / new line |
 | Esc | Cancel, close the panel, or leave selection mode |
 | ⌘/Ctrl+Enter | Copy & clear, in the Copy dialog |

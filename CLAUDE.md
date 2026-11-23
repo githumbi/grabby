@@ -21,9 +21,12 @@ pnpm --dir examples/react-vite dev        # try it in an app
 
 ## How it fits together (packages/grabby/src)
 
-- `core/grab.ts`: the engine (selection, comments, copy sheet, live mode, outbox, identity).
+- `core/grab.ts`: the engine (selection, comments, copy sheet, live mode, outbox, identity, toolbar collapse, markers, group/area comments).
+- `core/picker/`: `element-picker.ts` (hover, click, **drag to select**, **⌘/Ctrl-click to collect**, **hold** the selection while a comment is written; swallows presses on `window` capture while picking) and `region.ts` (which elements a drag box takes in, the common container, areas as fractions).
+- `core/overlay/`: `overlay-renderer.ts` (blue single-element highlight), `group-outline.ts` (green outlines for groups and areas, the drag marquee), `markers.ts` (numbered pins per page: a page-coordinate layer for page content, a fixed layer for fixed/sticky/scrolling-box content), `crosshair.ts`, `freeze-overlay.ts`, `toast.ts`.
 - `core/capture/`: `kind.ts` (action/field/text/media/container/section + promote icon→button), `facts.ts` (per-kind facts), `preview.ts` (≤300-char HTML preview), `styles.ts` (diff vs browser defaults), `redact.ts`, `export.ts` (Copy all / pull / MCP text), `screenshot.ts` (lazy modern-screenshot, Trusted-Types-safe sandbox).
 - `core/adapters/`: React, Angular, Vue 2/3, Svelte 4/5, DOM, composed per element; `stamp.ts` reads `data-grabby-loc="file:line:col[:ComponentName]"`.
+- `core/toolbar/`: `toolbar-renderer.ts` (bar and collapsed corner button, the morph animation), `comment-popover.ts` (new/edit, heading, Delete/Cancel/Save when editing), `comments-panel.ts`, `copy-sheet.ts`, `finish-sheet.ts`, `coach-mark.ts`.
 - `core/ui/`: everything renders in one `<grabby-root>` shadow root; `dom.ts` `h()` builder (no `innerHTML`, ever).
 - `core/sync/outbox.ts`: delivery to a collector with retries (keepalive, plus a last try on pagehide); `core/live/activation.ts`: `?grabby=<projectKey>` feedback links; `core/toolbar/finish-sheet.ts`: the live **Finish review** summary (Done clears sent comments and keeps the toolbar).
 - `plugin/`: unplugin build plugin (JSX/TSX + Vue SFC stamping, dev-only unless `includeSourceInBuild`).
@@ -47,16 +50,34 @@ The `grabby share` CLI (`packages/grabby/src/cli/commands/share.ts`) runs the se
 - **Privacy**: never capture form values or typed text; run captured text through `redact()`.
 - **No `innerHTML`**: build UI with `h()`; user text must never become markup.
 - **Adapters read, never import, frameworks.**
+- **Browser-only fields stay in the browser**: `sync` and `pin` are stripped in `outbox.ts` `wireShape` and in the webhook plugin; never add them to exports.
+- **Picking listens to pointer *and* mouse events.** Pages often cancel `pointerdown` while Grabby picks (to keep their menus shut), and the browser then stops sending `mousemove`/`mousedown`/`mouseup` until `pointerup`. Never cancel `pointerdown` yourself, for the same reason; cancel `mousedown`.
+- **Markers must not trail scrolling**: anything that should move with the page goes in page coordinates (absolute in `<grabby-root>`), not a fixed layer repositioned from `requestAnimationFrame`.
+- **This repo is public.** No client or project names, real project keys or collector URLs in code, tests, docs, commit messages or PR text; use `example`, `Acme`, `jane.workers.dev`.
 - Changes to published packages need a changeset (`pnpm changeset`), except the first 0.1.0 release (no changeset: the release workflow publishes the current versions).
 
-## State (2026-09-27)
+## State (2026-11-23)
 
-Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all five milestones: the rename and security work, capture and Copy & clear, adapters and the build plugin, live mode and the collector (with **Finish review**), and packaging, CI and docs. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`). PR #9 added supply-chain hardening (see `SECURITY.md`). PR #13 rewrote the README (see below). 206 tests.
+Everything is merged into `main` and released. The history from the original angular-grab by Nate Richardson is kept on purpose (and his copyright line in `LICENSE`). 243 tests in `@githumbi/grabby`, 58 in `@githumbi/grabby-server`.
 
-**On npm** (org `githumbi`, owned by npm user `thumbi74`):
-- `@githumbi/grabby` **0.1.2**, published by `release.yml` with provenance. 0.1.1 was the first automated release; 0.1.0 was published by hand.
-- `@githumbi/grabby-server` **0.1.0**.
-- Both packages use GitHub Actions trusted publishing, and tokens are disallowed. On npmjs.com each trusted publisher's **Allowed actions** must include direct `npm publish`: new ones are stage-only by default, which fails with E403 "OIDC permission denied".
+**On npm** (org `githumbi`, owned by npm user `thumbi74`), both published by `release.yml` with provenance through GitHub Actions trusted publishing (tokens are disallowed; each trusted publisher's **Allowed actions** must include direct `npm publish`, or publishing fails with E403 "OIDC permission denied"):
+- `@githumbi/grabby` **0.6.1**
+- `@githumbi/grabby-server` **0.6.0**
+
+**What shipped on 2026-11-23** (PRs #31–#43):
+
+| Version | What |
+|---|---|
+| 0.3.0 | Typing "g" no longer closes the comment box; deleting a sent comment deletes it on the collector; reviewer plain labels |
+| 0.4.0 | The clicked element stays selected (held) while its comment is written; the toolbar's close button collapses it to a corner button (remembered per tab in `sessionStorage` `grabby:v1:collapsed`) |
+| 0.5.0 | Numbered markers per page (`pin` = click point as fractions of the element); hover previews, click edits with Delete/Cancel/Save; hidden on other routes (pathname + `#/` hash) and while collapsed; the toolbar morphs between bar and corner button (ease-out expo, blur/scale content, reduced-motion respected) |
+| 0.5.1 | Markers for page content live in page coordinates, so they no longer trail scrolling |
+| 0.6.0 | Drag to select several elements (outermost ≥ 85% inside, max 20) or an area (nothing inside → region of the smallest containing element); ⌘/Ctrl-click to collect; comments carry `members` or `area`, `target` is the container; green square markers; screenshots cropped to the selection; collector validates/stores both; inbox and export list every element. Script budget raised to 56 KB |
+| 0.6.1 | Drags are followed with `pointermove` too, so they work on pages that cancel `pointerdown` |
+
+The behaviour of markers, collapse animation and multi-select was modelled on agentation.com's UX, implemented from scratch.
+
+**Flaky test:** `packages/server` `handler.test.ts > never builds alert links from a forged Host header` fails about one run in three locally (also on clean `main`); CI has passed every time. Rerun before suspecting a change.
 
 **Supply chain.** Keep these intact:
 - **pnpm 10.33.4.** Don't use 10.34.x, which was published without provenance.
@@ -71,7 +92,10 @@ Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all 
 1. Add a changeset to each PR that changes a published package.
 2. After a merge, `release.yml` pushes `changeset-release/main`. Its "create PR" step fails because the repo doesn't let Actions open PRs (kept off on purpose; a PR opened with the workflow token wouldn't run CI anyway).
 3. Open the "Version packages" PR from that branch by hand. Check the branch first with `gh api repos/githumbi/grabby/compare/main...changeset-release/main`: it should be 1 commit ahead and 0 behind.
-4. Merging it publishes the new version. Afterwards, confirm it on npm (the registry can lag a few minutes; use `npm install --prefer-online`) and run `npm audit signatures`.
+4. Wait for that PR's checks (`gh pr checks <n> --watch`; merging before they finish is refused), then merge: it publishes the new version.
+5. Confirm it on npm, then run `npm audit signatures`. **npm lists the version minutes before its tarball downloads**: `https://registry.npmjs.org/@githumbi/grabby/-/grabby-<v>.tgz` returns 404 and jsDelivr returns 502 until it does (about 5 minutes on 2026-11-23). Wait for both before pointing a site's script tag at the new version.
+
+To bring a PR branch up to date with `main`, merge `main` into it rather than rebasing: force-pushing is blocked for the agent (PRs are squash-merged, so the merge commit never reaches `main`).
 
 **`main` is protected:**
 - Changes only through a PR.
@@ -89,11 +113,10 @@ Everything is merged into `main` and released. PR #1 (`445c73a`) brought in all 
 
 Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with two reviewers (named + anonymous) end to end through the collector, `pull` and MCP; Finish review with the collector going down and coming back; SRI against jsDelivr; strict CSP + Trusted Types with zero violations.
 
-**Mobigrow portal** (`~/Documents/KCB work/Mobigrow/prototype`, repo `githumbi/mobigrow-portal`) uses Grabby via a vendored tarball (`vendor/githumbi-grabby-0.1.0-80950f4.tgz`). It could now switch to `@githumbi/grabby` from npm. **Don't change the Mobigrow project unless the user asks**; they reverted the last update there.
 
 ## Next steps
 
-1. **Review the Dependabot major-update PRs one at a time.** None has been looked at yet:
+1. **Review the Dependabot PRs one at a time.** None has been looked at yet (#33 bumps the pinned Actions group):
 
    | PR | Update | Notes |
    |---|---|---|
@@ -109,6 +132,6 @@ Verified in a browser: React, Vue, Svelte, Angular, plain HTML; live mode with t
    - Add `tsc --noEmit` to CI.
    - Dismiss the by-design CodeQL alert (`js/http-to-file-access`, `cli.ts` `--out`).
    - Delete the merged `grabby-m1`…`grabby-m5`, `react-support` and old feature branches.
-   - Rename this folder to `~/Documents/grabby` (update `~/Documents/.claude/launch.json`).
+   - Fix the flaky forged-Host alert test (see State).
 
 Backlog: Turbopack isn't supported; Svelte 4 line numbers are untested (only Svelte 5 was run); the Docker image wasn't built (daemon was off; its install steps were replayed locally); a dashboard on the REST API; tsup → tsdown migration.

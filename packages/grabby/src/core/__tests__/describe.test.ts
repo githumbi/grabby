@@ -20,7 +20,7 @@ describe('plain-language element names for reviewers', () => {
       <label for="e">Email address</label><input id="e" type="email" value="jane@example.com">
       <input id="s" type="search" placeholder="Search farmers">
       <select id="c" aria-label="Country"><option>Kenya</option></select>
-      <img id="i" src="logo.png" alt="KCB logo">
+      <img id="i" src="logo.png" alt="Acme logo">
       <svg id="v"></svg>`);
     expect(describeElement($('#b'))).toBe('Button “Back to the journey index”');
     expect(describeElement($('#l'))).toBe('Link “Pricing”');
@@ -28,20 +28,20 @@ describe('plain-language element names for reviewers', () => {
     expect(describeElement($('#e'))).toBe('Text box “Email address”');
     expect(describeElement($('#s'))).toBe('Search box “Search farmers”');
     expect(describeElement($('#c'))).toBe('Dropdown “Country”');
-    expect(describeElement($('#i'))).toBe('Image “KCB logo”');
+    expect(describeElement($('#i'))).toBe('Image “Acme logo”');
     expect(describeElement($('#v'))).toBe('Icon');
   });
 
   it('names text, groups of content, and the page', () => {
     mount(`
-      <h2 id="h">KCB branch staff shell preview</h2>
+      <h2 id="h">Branch staff shell preview</h2>
       <p id="p">This role's screens aren't built yet.</p>
       <div id="card" style="box-shadow: 0 1px 3px #0003"><h3>Your plan</h3><p>Pro</p></div>
       <section id="sec"><h2>Loans</h2><p>x</p></section>
       <div id="box"><span>a</span><span>b</span></div>
       <nav id="n"><a href="/">Home</a></nav>
       <ul id="ul"><li>One</li><li>Two</li></ul>`);
-    expect(describeElement($('#h'))).toBe('Heading “KCB branch staff shell preview”');
+    expect(describeElement($('#h'))).toBe('Heading “Branch staff shell preview”');
     expect(describeElement($('#p'))).toBe('Text “This role’s screens aren’t built yet.”'.replace(/’/g, "'"));
     expect(describeElement($('#card'))).toBe('Card “Your plan”');
     expect(describeElement($('#sec'))).toBe('Section “Loans”');

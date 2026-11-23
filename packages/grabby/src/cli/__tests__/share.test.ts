@@ -24,8 +24,8 @@ describe('patchLoaderTag', () => {
         <script
           src="https://cdn.jsdelivr.net/npm/@githumbi/grabby@0.1.1/dist/loader.global.js"
           data-mode="live"
-          data-server="https://pda-monitors-spam-ronald.trycloudflare.com"
-          data-project-key="pk_fDJw0rASNkgYNa-HSfqZnw"
+          data-server="https://old-tunnel.trycloudflare.com"
+          data-project-key="pk_exampleexample123"
           defer
         ></script>
       </body>`;

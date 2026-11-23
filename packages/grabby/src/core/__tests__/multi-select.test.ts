@@ -150,7 +150,7 @@ describe('commenting on several elements or an area', () => {
   });
 
   it('drags still work on a page that cancels pointerdown (no mousemove arrives)', async () => {
-    // Like the cash repatriation prototype: keeps its menus shut while Grabby picks.
+    // Like an app that keeps its menus shut while Grabby picks.
     const guard = (e: Event) => {
       if (document.body.classList.contains('grabby-crosshair-active')) {
         e.preventDefault();

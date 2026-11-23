@@ -10,3 +10,6 @@ packages/*/LICENSE
 .grabby-demo/
 packages/server/src/inbox/generated.ts
 .grabby-inbox-demo/
+
+# Local Claude Code settings (per machine, never shared)
+.claude/settings.local.json
