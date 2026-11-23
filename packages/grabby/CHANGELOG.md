@@ -1,5 +1,15 @@
 # @githumbi/grabby
 
+## 0.4.0
+
+### Minor Changes
+
+- 1beb9ae: The toolbar's close button now collapses it into a round button in the bottom-right corner, with the comment count on it, instead of removing it. One click (or Alt+G) opens the toolbar again. It stays collapsed when the reviewer moves to another page in the same tab, and comments keep sending while it is collapsed. Finish review is unchanged, and `hideToolbar()` / `hide()` still remove the toolbar completely.
+
+### Patch Changes
+
+- 1beb9ae: The element you clicked stays selected while you write its comment. Moving the mouse used to move the highlight onto whatever was underneath, so it was unclear which element the comment would go to (and a click elsewhere quietly switched it). Now the highlight stays on the chosen element, the crosshair lines hide and the normal cursor returns until you save or cancel, and clicks on the page are ignored. Pages that guard their own pointer handlers with `body.grabby-crosshair-active` stay guarded: the class remains, and `body.grabby-crosshair-held` is added while a comment is open.
+
 ## 0.3.0
 
 ### Minor Changes
